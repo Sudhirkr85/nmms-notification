@@ -1,0 +1,46 @@
+name: NMMS Auto Scraper & Telegram Poster
+
+on:
+  schedule:
+    # Runs 4 times a day (IST times: 9:30 AM, 2:30 PM, 6:30 PM, 9:30 PM)
+    # Converted to UTC: 04:00, 09:00, 13:00, 16:00
+    - cron: '0 4,9,13,16 * * *'
+  workflow_dispatch: # Allows manual trigger button in GitHub Actions tab anytime!
+
+jobs:
+  run-scraper:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Pipeline
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+          COACHING_NAME: ${{ secrets.COACHING_NAME }}
+          COACHING_PHONE: ${{ secrets.COACHING_PHONE }}
+          COACHING_YOUTUBE: ${{ secrets.COACHING_YOUTUBE }}
+          COACHING_TELEGRAM: ${{ secrets.COACHING_TELEGRAM }}
+        run: |
+          python main.py
+
+      - name: Commit & Push DB updates to avoid duplicate messages
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add database/notifications.db
+          git commit -m "Auto: Update posted notifications DB [skip ci]" || echo "No changes to commit"
+          git push
