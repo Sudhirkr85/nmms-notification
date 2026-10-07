@@ -7,10 +7,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from config.states import STATE_CONFIG
-from database.db import init_db, is_already_posted, record_posted, get_all_posted_count
+from data.storage import is_already_posted, record_posted
 from scrapers.portal_scraper import scrape_state_website
 from bot.formatter import format_nmms_notification
 from bot.telegram_poster import send_telegram_message
+from bot.reminder import check_and_send_reminders
 
 logging.basicConfig(
     level=logging.INFO,
@@ -19,8 +20,11 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 def run_nmms_pipeline():
-    logger.info("Initializing Database...")
-    init_db()
+    logger.info("Checking urgent last-date reminders first...")
+    try:
+        check_and_send_reminders()
+    except Exception as e:
+        logger.warning(f"Reminder check error: {e}")
 
     total_states = len(STATE_CONFIG)
     logger.info(f"Starting NMMS notification check across {total_states} state portals...")
@@ -36,21 +40,20 @@ def run_nmms_pipeline():
             notif_id = notice["id"]
 
             if is_already_posted(notif_id):
-                logger.info(f"   -> Already posted earlier: '{notice['title'][:40]}...'")
                 continue
 
             # New notification found!
             logger.info(f"   -> NEW NOTIFICATION FOUND: '{notice['title']}'")
 
-            # Format the Telegram message
+            # Format clean short Telegram message
             message_text = format_nmms_notification(
                 state=notice["state"],
                 authority=notice["authority"],
                 update_type=notice["update_type"],
                 title=notice["title"],
                 apply_start=notice.get("apply_start", "Active"),
-                last_date=notice.get("last_date", "Refer official circular"),
-                exam_date=notice.get("exam_date", "Refer official circular"),
+                last_date=notice.get("last_date", "Refer official notice"),
+                exam_date=notice.get("exam_date", "Refer official notice"),
                 apply_link=notice.get("apply_link", ""),
                 pdf_link=notice.get("pdf_link", "")
             )
@@ -62,7 +65,7 @@ def run_nmms_pipeline():
                 pdf_url=notice.get("pdf_link")
             )
 
-            # Mark as posted in database so we never duplicate
+            # Mark as posted in JSON history
             record_posted(
                 notification_id=notif_id,
                 state=notice["state"],
@@ -73,11 +76,10 @@ def run_nmms_pipeline():
             )
             new_posts += 1
 
-        # Gentle delay between state site checks
+        # Polite delay between sites
         time.sleep(2)
 
     logger.info(f"Scan completed. Total new notifications posted: {new_posts}")
-    logger.info(f"Total history records in database: {get_all_posted_count()}")
 
 if __name__ == "__main__":
     run_nmms_pipeline()

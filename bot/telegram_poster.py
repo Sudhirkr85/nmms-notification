@@ -30,17 +30,14 @@ def send_telegram_message(text: str, apply_url: str = None, pdf_url: str = None)
         "disable_web_page_preview": False
     }
 
-    # Add interactive inline button for direct 1-click access
+    # Only 1 single, clean, prominent button for viewing the notification
     inline_keyboard = []
-    button_row = []
-    
     target_link = pdf_url if (pdf_url and pdf_url.startswith("http")) else apply_url
     if target_link and target_link.startswith("http"):
-        btn_label = "📄 Download Official PDF" if target_link.lower().endswith(".pdf") else "🔗 View Official Notice"
-        button_row.append({"text": btn_label, "url": target_link})
+        btn_label = "📄 View / Download Notice" if target_link.lower().endswith(".pdf") else "🔗 View Official Notice"
+        inline_keyboard.append([{"text": btn_label, "url": target_link}])
 
-    if button_row:
-        inline_keyboard.append(button_row)
+    if inline_keyboard:
         payload["reply_markup"] = json.dumps({"inline_keyboard": inline_keyboard})
 
     try:
