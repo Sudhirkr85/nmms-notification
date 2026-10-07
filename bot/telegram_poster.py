@@ -5,10 +5,10 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def send_telegram_message(text: str, apply_url: str = None, pdf_url: str = None) -> bool:
+def send_telegram_message(text: str, apply_url: str = None, pdf_url: str = None, btn_text: str = None) -> bool:
     """
     Sends message to the Telegram channel using Telegram Bot API.
-    Supports inline action buttons for apply and PDF.
+    Supports smart dynamic contextual button labels.
     """
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     channel_id = os.getenv("TELEGRAM_CHANNEL_ID")
@@ -30,12 +30,12 @@ def send_telegram_message(text: str, apply_url: str = None, pdf_url: str = None)
         "disable_web_page_preview": False
     }
 
-    # Only 1 single, clean, prominent button for viewing the notification
+    # Smart contextual action button
     inline_keyboard = []
     target_link = pdf_url if (pdf_url and pdf_url.startswith("http")) else apply_url
     if target_link and target_link.startswith("http"):
-        btn_label = "📄 View / Download Notice" if target_link.lower().endswith(".pdf") else "🔗 View Official Notice"
-        inline_keyboard.append([{"text": btn_label, "url": target_link}])
+        label = btn_text if btn_text else ("📄 View / Download PDF" if target_link.lower().endswith(".pdf") else "🔗 View Official Notice")
+        inline_keyboard.append([{"text": label, "url": target_link}])
 
     if inline_keyboard:
         payload["reply_markup"] = json.dumps({"inline_keyboard": inline_keyboard})
