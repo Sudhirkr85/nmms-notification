@@ -58,11 +58,16 @@ def run_nmms_pipeline():
                 pdf_link=notice.get("pdf_link", "")
             )
 
+            # Category detection for smart button
+            from bot.formatter import detect_notification_category
+            category_info = detect_notification_category(notice["title"])
+
             # Post to Telegram Channel
             posted = send_telegram_message(
                 text=message_text,
                 apply_url=notice.get("apply_link"),
-                pdf_url=notice.get("pdf_link")
+                pdf_url=notice.get("pdf_link"),
+                btn_text=category_info.get("action_btn")
             )
 
             # Mark as posted in JSON history
