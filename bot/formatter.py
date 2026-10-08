@@ -79,19 +79,31 @@ def format_nmms_notification(
     last_date: str = "",
     exam_date: str = "",
     apply_link: str = "",
-    pdf_link: str = ""
+    pdf_link: str = "",
+    summary_en: str = "",
+    summary_hi: str = ""
 ) -> str:
     """
-    Smart contextual notification: reads the notice and customizes message accordingly.
+    Smart contextual notification with English & Hindi bilingual AI summaries.
     """
     category = detect_notification_category(title)
     target_link = pdf_link if (pdf_link and pdf_link.startswith("http")) else apply_link
     if not target_link or not target_link.startswith("http"):
         target_link = "https://scholarships.gov.in"
 
+    # Bilingual Summary Block
+    summary_lines = []
+    if summary_en:
+        summary_lines.append(f"🇬🇧 <i>{summary_en}</i>")
+    if summary_hi:
+        summary_lines.append(f"🇮🇳 <i>{summary_hi}</i>")
+    
+    summary_block = ""
+    if summary_lines:
+        summary_block = "\n📌 <b>SUMMARY:</b>\n" + "\n".join(summary_lines) + "\n"
+
     # Contextual body content based on category
     if category["type"] in ["APPLICATION_FORM", "DATE_EXTENSION"]:
-        # Only show dates if actual dates are present
         dates_content = f"""━━━━━━━━━━━━━━━━━━━━━
 📅 <b>IMPORTANT DATES:</b>
 🟢 <b>Start Date :</b> <a href="{target_link}"><b>{apply_start or 'Active Now'}</b></a>
@@ -99,20 +111,14 @@ def format_nmms_notification(
 🟡 <b>Exam Date   :</b> <a href="{target_link}"><b>{exam_date or 'To be notified'}</b></a>
 ━━━━━━━━━━━━━━━━━━━━━"""
     else:
-        # Result, Question paper, Admit card etc.
-        dates_content = f"""━━━━━━━━━━━━━━━━━━━━━
-ℹ️ <b>UPDATE INFO:</b>
-{category['summary']}
-━━━━━━━━━━━━━━━━━━━━━"""
+        dates_content = ""
 
     message = f"""{category['badge']}
 
 📍 <b>State:</b> <b><u>{state.upper()}</u></b>
 🏢 <b>Authority:</b> {authority}
 📝 <b>Notice:</b> <b>{title}</b>
-
-{dates_content}
-
+{summary_block}{dates_content}
 👉 <a href="{target_link}"><b>🔗 Click Here to View / Download Notice</b></a>
 
 ━━━━━━━━━━━━━━━━━━━━━

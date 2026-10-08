@@ -45,22 +45,36 @@ def run_nmms_pipeline():
             # New notification found!
             logger.info(f"   -> NEW NOTIFICATION FOUND: '{notice['title']}'")
 
-            # Format clean short Telegram message
+            # Deep AI Analysis with Groq (handles PDF & HTML reading)
+            from scrapers.ai_reader import analyze_notice_with_groq
+            target_url = notice.get("pdf_link") or notice.get("apply_link") or ""
+            ai_data = analyze_notice_with_groq(state, notice["title"], target_url)
+
+            final_title = ai_data.get("clean_title") or notice["title"]
+            final_start = ai_data.get("start_date") or notice.get("apply_start", "")
+            final_last = ai_data.get("last_date") or notice.get("last_date", "")
+            final_exam = ai_data.get("exam_date") or notice.get("exam_date", "")
+            final_update_type = ai_data.get("category") or notice["update_type"]
+            ai_summary = ai_data.get("summary", "")
+
+            # Format clean short Telegram message with Bilingual AI summary
             message_text = format_nmms_notification(
                 state=notice["state"],
                 authority=notice["authority"],
-                update_type=notice["update_type"],
-                title=notice["title"],
-                apply_start=notice.get("apply_start", "Active"),
-                last_date=notice.get("last_date", "Refer official notice"),
-                exam_date=notice.get("exam_date", "Refer official notice"),
+                update_type=final_update_type,
+                title=final_title,
+                apply_start=final_start,
+                last_date=final_last,
+                exam_date=final_exam,
                 apply_link=notice.get("apply_link", ""),
-                pdf_link=notice.get("pdf_link", "")
+                pdf_link=notice.get("pdf_link", ""),
+                summary_en=ai_data.get("summary_en", ""),
+                summary_hi=ai_data.get("summary_hi", "")
             )
 
             # Category detection for smart button
             from bot.formatter import detect_notification_category
-            category_info = detect_notification_category(notice["title"])
+            category_info = detect_notification_category(final_title)
 
             # Post to Telegram Channel
             posted = send_telegram_message(
