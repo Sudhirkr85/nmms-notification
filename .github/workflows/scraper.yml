@@ -30,6 +30,7 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           COACHING_NAME: ${{ secrets.COACHING_NAME }}
           COACHING_PHONE: ${{ secrets.COACHING_PHONE }}
           COACHING_YOUTUBE: ${{ secrets.COACHING_YOUTUBE }}
