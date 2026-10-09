@@ -30,12 +30,22 @@ def send_telegram_message(text: str, apply_url: str = None, pdf_url: str = None,
         "disable_web_page_preview": False
     }
 
-    # Smart contextual action button
+    # Smart contextual action buttons
     inline_keyboard = []
-    target_link = pdf_url if (pdf_url and pdf_url.startswith("http")) else apply_url
-    if target_link and target_link.startswith("http"):
-        label = btn_text if btn_text else ("📄 View / Download PDF" if target_link.lower().endswith(".pdf") else "🔗 View Official Notice")
-        inline_keyboard.append([{"text": label, "url": target_link}])
+    clean_pdf = (pdf_url or "").strip()
+    clean_apply = (apply_url or "").strip()
+
+    buttons = []
+    if clean_pdf and clean_pdf.startswith("http"):
+        doc_label = btn_text if btn_text else "📄 View / Download PDF"
+        buttons.append({"text": doc_label, "url": clean_pdf})
+
+    if clean_apply and clean_apply.startswith("http") and clean_apply != clean_pdf:
+        portal_label = "🌐 Official Portal" if clean_pdf else (btn_text if btn_text else "🌐 View Official Portal")
+        buttons.append({"text": portal_label, "url": clean_apply})
+
+    for b in buttons:
+        inline_keyboard.append([b])
 
     if inline_keyboard:
         payload["reply_markup"] = json.dumps({"inline_keyboard": inline_keyboard})

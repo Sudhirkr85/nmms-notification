@@ -57,7 +57,7 @@ def run_nmms_pipeline():
             final_update_type = ai_data.get("category") or notice["update_type"]
             ai_summary = ai_data.get("summary", "")
 
-            # Format clean short Telegram message with Bilingual AI summary
+            # Format clean short Telegram message with Bilingual AI highlights
             message_text = format_nmms_notification(
                 state=notice["state"],
                 authority=notice["authority"],
@@ -68,13 +68,15 @@ def run_nmms_pipeline():
                 exam_date=final_exam,
                 apply_link=notice.get("apply_link", ""),
                 pdf_link=notice.get("pdf_link", ""),
+                highlights_en=ai_data.get("highlights_en", []),
+                highlights_hi=ai_data.get("highlights_hi", []),
                 summary_en=ai_data.get("summary_en", ""),
                 summary_hi=ai_data.get("summary_hi", "")
             )
 
             # Category detection for smart button
             from bot.formatter import detect_notification_category
-            category_info = detect_notification_category(final_title)
+            category_info = detect_notification_category(final_title, final_update_type)
 
             # Post to Telegram Channel
             posted = send_telegram_message(

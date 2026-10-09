@@ -29,6 +29,53 @@ def extract_dates_from_text(text: str):
         found.extend(matches)
     return found
 
+from urllib.parse import urljoin, urlparse, urlsplit, urlunsplit, quote
+
+def clean_and_normalize_url(base_url: str, href: str, onclick: str = "") -> str:
+    """
+    Guarantees a clean, absolute, valid URL from relative paths, protocols, anchors, spaces, and javascript handlers.
+    """
+    candidate = (href or "").strip()
+
+    # Check if href is javascript or empty or #, but has real link embedded or in onclick
+    if not candidate or candidate.startswith("javascript:") or candidate == "#":
+        text_to_search = f"{candidate} {onclick or ''}"
+        # Extract url from window.open('...'), openDoc('...'), etc.
+        match = re.search(r"""(?:href|window\.open|openDoc|viewPdf|location\.href)[=\s(]['"]([^'"]+)['"]""", text_to_search, re.IGNORECASE)
+        if match:
+            candidate = match.group(1).strip()
+        else:
+            match_path = re.search(r"""['"]([^'"]+\.(?:pdf|docx?|html?|aspx?|php))['"]""", text_to_search, re.IGNORECASE)
+            if match_path:
+                candidate = match_path.group(1).strip()
+            else:
+                return base_url
+
+    if not candidate or candidate.startswith("javascript:") or candidate.startswith("#"):
+        return base_url
+
+    # Handle protocol-relative URLs like //example.com/doc.pdf
+    if candidate.startswith("//"):
+        candidate = "https:" + candidate
+
+    full_url = urljoin(base_url, candidate)
+    try:
+        parts = urlsplit(full_url)
+        if not parts.scheme or not parts.netloc:
+            return base_url
+
+        # Ensure scheme is http or https
+        scheme = parts.scheme.lower()
+        if scheme not in ["http", "https"]:
+            scheme = "https"
+
+        # Properly quote path to encode spaces and special characters without double-quoting
+        clean_path = quote(parts.path, safe="/:@&?=+%#")
+        clean_url = urlunsplit((scheme, parts.netloc, clean_path, parts.query, parts.fragment))
+        return clean_url
+    except Exception:
+        return base_url
+
 def scrape_state_website(state: str, config: dict) -> List[Dict]:
     """
     Scrapes an official state education portal looking for NMMS links or notifications.
@@ -45,32 +92,19 @@ def scrape_state_website(state: str, config: dict) -> List[Dict]:
         soup = BeautifulSoup(resp.text, "html.parser")
         
         # Search all anchor tags
-        for a_tag in soup.find_all("a", href=True):
+        for a_tag in soup.find_all("a"):
             text = a_tag.get_text(strip=True)
-            href = a_tag["href"].strip()
+            raw_href = a_tag.get("href", "").strip()
+            raw_onclick = a_tag.get("onclick", "").strip()
 
             # Match any NMMS keyword
             if any(k.lower() in text.lower() for k in keywords):
-                if not href.startswith("http"):
-                    href = requests.compat.urljoin(url, href)
+                # Clean and resolve absolute URL
+                resolved_url = clean_and_normalize_url(url, raw_href, raw_onclick)
+                is_pdf = resolved_url.lower().endswith(".pdf") or ".pdf" in raw_href.lower() or ".pdf" in raw_onclick.lower()
 
-                pdf_link = href if href.lower().endswith(".pdf") else ""
-                apply_link = href if not href.lower().endswith(".pdf") else url
-
-                # Try to extract dates from notice title/surrounding text
-                dates = extract_dates_from_text(text)
-                
-                is_result_or_paper = any(w in text.lower() for w in ["result", "paper", "answer key", "admit card"])
-                if is_result_or_paper:
-                    update_type = "Result / Circular / Notice"
-                    start_date = "Official Portal Notice"
-                    last_date = "Refer Notice for details"
-                    exam_date = "Check Circular"
-                else:
-                    update_type = "Online Form / Application"
-                    start_date = dates[0] if len(dates) > 0 else "Active on Portal"
-                    last_date = dates[1] if len(dates) > 1 else "Check Official Notice"
-                    exam_date = dates[2] if len(dates) > 2 else "Check Official Notice"
+                pdf_link = resolved_url if is_pdf else ""
+                apply_link = resolved_url if not is_pdf else url
 
                 notif_id = generate_notification_id(state, text)
                 notifications.append({
@@ -78,12 +112,12 @@ def scrape_state_website(state: str, config: dict) -> List[Dict]:
                     "state": state,
                     "authority": config.get("authority", "State Education Board"),
                     "title": text,
-                    "update_type": update_type,
+                    "update_type": "Official Update",
                     "apply_link": apply_link,
                     "pdf_link": pdf_link,
-                    "apply_start": start_date,
-                    "last_date": last_date,
-                    "exam_date": exam_date
+                    "apply_start": "",
+                    "last_date": "",
+                    "exam_date": ""
                 })
                 if len(notifications) >= 2:
                     break
