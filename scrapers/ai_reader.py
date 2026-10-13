@@ -176,7 +176,7 @@ Identify the exact category:
 7. CIRCULAR: General administrative guidelines.
 
 Extract exact dates if present (or null if not an application form).
-Provide 2-3 specific, actionable, fact-filled bullet points in both English and Hindi tailored directly to this notice type.
+Provide 2-3 specific, actionable, fact-filled bullet points in both English and Hindi (strictly in Devanagari script / देवनागरी लिपि, even if the source notice is in another regional language) tailored directly to this notice type.
 
 Return ONLY valid JSON with this exact structure:
 {
@@ -186,14 +186,14 @@ Return ONLY valid JSON with this exact structure:
   "last_date": "Exact last date e.g. 30 Nov 2026 or null",
   "exam_date": "Exact exam date e.g. 17 Jan 2027 or null",
   "highlights_en": [
-    "Point 1 with exact facts/instructions",
-    "Point 2 with exact facts/instructions",
-    "Point 3 with exact facts/instructions"
+    "Point 1 with exact facts/instructions in English",
+    "Point 2 with exact facts/instructions in English",
+    "Point 3 with exact facts/instructions in English"
   ],
   "highlights_hi": [
-    "बिंदु 1 सटीक तथ्य एवं निर्देश",
-    "बिंदु 2 सटीक तथ्य एवं निर्देश",
-    "बिंदु 3 सटीक तथ्य एवं निर्देश"
+    "बिंदु 1 शुद्ध हिंदी (देवनागरी लिपि) में सटीक तथ्य एवं निर्देश",
+    "बिंदु 2 शुद्ध हिंदी (देवनागरी लिपि) में सटीक तथ्य एवं निर्देश",
+    "बिंदु 3 शुद्ध हिंदी (देवनागरी लिपि) में सटीक तथ्य एवं निर्देश"
   ]
 }
 Important: Output ONLY the JSON object, no markdown code fence, no text outside JSON."""
@@ -211,6 +211,12 @@ Important: Output ONLY the JSON object, no markdown code fence, no text outside 
         )
         response_text = chat_completion.choices[0].message.content
         data = json.loads(response_text)
+
+        # Normalize string "null" or "None" in date fields to None
+        for df in ["start_date", "last_date", "exam_date"]:
+            val = data.get(df)
+            if isinstance(val, str) and val.strip().lower() in ["null", "none", "n/a", ""]:
+                data[df] = None
         
         # Verify and supplement highlights if empty
         category = data.get("category", "CIRCULAR")

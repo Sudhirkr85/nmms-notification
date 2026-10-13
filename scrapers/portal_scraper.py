@@ -81,32 +81,61 @@ def scrape_state_website(state: str, config: dict) -> List[Dict]:
     Scrapes an official state education portal looking for NMMS links or notifications.
     """
     notifications = []
+    seen_ids = set()
     url = config.get("official_url")
     keywords = config.get("keywords", ["NMMS"])
 
     try:
-        resp = requests.get(url, headers=HEADERS, timeout=12, verify=False)
+        resp = requests.get(url, headers=HEADERS, timeout=15, verify=False)
         if resp.status_code != 200:
             return notifications
 
         soup = BeautifulSoup(resp.text, "html.parser")
         
+        # Generic navbar labels to ignore unless they link directly to a PDF
+        generic_labels = {
+            "nmms", "nmmss", "nmmse", "nmms exam", "nmms scholarship",
+            "nmmss scholarship", "📢 nmms scholarship"
+        }
+
         # Search all anchor tags
         for a_tag in soup.find_all("a"):
-            text = a_tag.get_text(strip=True)
+            raw_text = a_tag.get_text(strip=True)
+            # Strip dynamic relative time prefixes like "126 days ago" or "142 weeks ago"
+            text = re.sub(r"^[\d\s]+(?:days?|weeks?|months?|hours?|minutes?)\s+ago\s*", "", raw_text, flags=re.IGNORECASE).strip()
+            if not text:
+                continue
+
             raw_href = a_tag.get("href", "").strip()
             raw_onclick = a_tag.get("onclick", "").strip()
+            if not raw_href and not raw_onclick:
+                continue
 
-            # Match any NMMS keyword
+            # Match any NMMS keyword in the anchor text
             if any(k.lower() in text.lower() for k in keywords):
                 # Clean and resolve absolute URL
                 resolved_url = clean_and_normalize_url(url, raw_href, raw_onclick)
                 is_pdf = resolved_url.lower().endswith(".pdf") or ".pdf" in raw_href.lower() or ".pdf" in raw_onclick.lower()
 
+                # Skip generic 1-2 word menu bar links that are not PDFs
+                if not is_pdf and text.lower() in generic_labels:
+                    continue
+
+                # Skip outdated archive notices from 2020-2024 unless 2025/2026/2027 is mentioned
+                combined_check = f"{text} {resolved_url}"
+                has_old_year = bool(re.search(r"202[0-4]", combined_check))
+                has_current_year = bool(re.search(r"202[5-8]", combined_check))
+                if has_old_year and not has_current_year:
+                    continue
+
                 pdf_link = resolved_url if is_pdf else ""
                 apply_link = resolved_url if not is_pdf else url
 
                 notif_id = generate_notification_id(state, text)
+                if notif_id in seen_ids:
+                    continue
+                seen_ids.add(notif_id)
+
                 notifications.append({
                     "id": notif_id,
                     "state": state,
@@ -119,7 +148,7 @@ def scrape_state_website(state: str, config: dict) -> List[Dict]:
                     "last_date": "",
                     "exam_date": ""
                 })
-                if len(notifications) >= 2:
+                if len(notifications) >= 5:
                     break
 
     except Exception:

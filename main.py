@@ -35,6 +35,7 @@ def run_nmms_pipeline():
         logger.info(f"[{idx}/{total_states}] Checking: {state} ({config['authority']})...")
         
         found_notices = scrape_state_website(state, config)
+        state_new_posts = 0
 
         for notice in found_notices:
             notif_id = notice["id"]
@@ -86,16 +87,20 @@ def run_nmms_pipeline():
                 btn_text=category_info.get("action_btn")
             )
 
-            # Mark as posted in JSON history
-            record_posted(
-                notification_id=notif_id,
-                state=notice["state"],
-                title=notice["title"],
-                apply_link=notice.get("apply_link", ""),
-                pdf_link=notice.get("pdf_link", ""),
-                last_date=notice.get("last_date", "")
-            )
-            new_posts += 1
+            if posted:
+                # Mark as posted in JSON history only when actually sent
+                record_posted(
+                    notification_id=notif_id,
+                    state=notice["state"],
+                    title=notice["title"],
+                    apply_link=notice.get("apply_link", ""),
+                    pdf_link=notice.get("pdf_link", ""),
+                    last_date=final_last or notice.get("last_date", "")
+                )
+                new_posts += 1
+                state_new_posts += 1
+                if state_new_posts >= 2:
+                    break
 
         # Polite delay between sites
         time.sleep(2)
