@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 def send_telegram_message(text: str, apply_url: str = None, pdf_url: str = None, btn_text: str = None) -> bool:
     """
     Sends message to the Telegram channel using Telegram Bot API.
-    Supports smart dynamic contextual button labels.
+    Supports smart dynamic contextual button labels (PDFs, Images, and Web Portals).
     """
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     channel_id = os.getenv("TELEGRAM_CHANNEL_ID")
@@ -37,7 +37,9 @@ def send_telegram_message(text: str, apply_url: str = None, pdf_url: str = None,
 
     buttons = []
     if clean_pdf and clean_pdf.startswith("http"):
-        doc_label = btn_text if btn_text else "📄 View / Download PDF"
+        is_image = any(clean_pdf.lower().endswith(ext) for ext in [".jpg", ".jpeg", ".png", ".webp"])
+        default_doc_label = "🖼️ View Notice Image" if is_image else "📄 View / Download PDF"
+        doc_label = btn_text if btn_text else default_doc_label
         buttons.append({"text": doc_label, "url": clean_pdf})
 
     if clean_apply and clean_apply.startswith("http") and clean_apply != clean_pdf:

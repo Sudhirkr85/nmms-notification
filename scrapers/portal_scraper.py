@@ -45,7 +45,7 @@ def clean_and_normalize_url(base_url: str, href: str, onclick: str = "") -> str:
         if match:
             candidate = match.group(1).strip()
         else:
-            match_path = re.search(r"""['"]([^'"]+\.(?:pdf|docx?|html?|aspx?|php))['"]""", text_to_search, re.IGNORECASE)
+            match_path = re.search(r"""['"]([^'"]+\.(?:pdf|docx?|html?|aspx?|php|jpe?g|png))['"]""", text_to_search, re.IGNORECASE)
             if match_path:
                 candidate = match_path.group(1).strip()
             else:
@@ -79,6 +79,7 @@ def clean_and_normalize_url(base_url: str, href: str, onclick: str = "") -> str:
 def scrape_state_website(state: str, config: dict) -> List[Dict]:
     """
     Scrapes an official state education portal looking for NMMS links or notifications.
+    Supports regular links, PDFs, and image/poster notices (via alt/title attributes).
     """
     notifications = []
     seen_ids = set()
@@ -92,7 +93,7 @@ def scrape_state_website(state: str, config: dict) -> List[Dict]:
 
         soup = BeautifulSoup(resp.text, "html.parser")
         
-        # Generic navbar labels to ignore unless they link directly to a PDF
+        # Generic navbar labels to ignore unless they link directly to a document/PDF
         generic_labels = {
             "nmms", "nmmss", "nmmse", "nmms exam", "nmms scholarship",
             "nmmss scholarship", "📢 nmms scholarship"
@@ -101,6 +102,15 @@ def scrape_state_website(state: str, config: dict) -> List[Dict]:
         # Search all anchor tags
         for a_tag in soup.find_all("a"):
             raw_text = a_tag.get_text(strip=True)
+
+            # If no direct inner text, extract from alt, title, or aria-label of child img or anchor
+            if not raw_text:
+                img_tag = a_tag.find("img")
+                if img_tag:
+                    raw_text = img_tag.get("alt", "").strip() or img_tag.get("title", "").strip()
+                if not raw_text:
+                    raw_text = a_tag.get("title", "").strip() or a_tag.get("aria-label", "").strip()
+
             # Strip dynamic relative time prefixes like "126 days ago" or "142 weeks ago"
             text = re.sub(r"^[\d\s]+(?:days?|weeks?|months?|hours?|minutes?)\s+ago\s*", "", raw_text, flags=re.IGNORECASE).strip()
             if not text:
@@ -111,14 +121,20 @@ def scrape_state_website(state: str, config: dict) -> List[Dict]:
             if not raw_href and not raw_onclick:
                 continue
 
-            # Match any NMMS keyword in the anchor text
+            # Match any NMMS keyword in the anchor text or image alt
             if any(k.lower() in text.lower() for k in keywords):
                 # Clean and resolve absolute URL
                 resolved_url = clean_and_normalize_url(url, raw_href, raw_onclick)
-                is_pdf = resolved_url.lower().endswith(".pdf") or ".pdf" in raw_href.lower() or ".pdf" in raw_onclick.lower()
+                url_lower = resolved_url.lower()
+                raw_href_lower = raw_href.lower()
+                raw_onclick_lower = raw_onclick.lower()
 
-                # Skip generic 1-2 word menu bar links that are not PDFs
-                if not is_pdf and text.lower() in generic_labels:
+                # Document extensions including PDFs and notice images/scans
+                doc_extensions = (".pdf", ".jpg", ".jpeg", ".png")
+                is_doc = any(url_lower.endswith(ext) or ext in raw_href_lower or ext in raw_onclick_lower for ext in doc_extensions)
+
+                # Skip generic 1-2 word menu bar links that are not documents
+                if not is_doc and text.lower() in generic_labels:
                     continue
 
                 # Skip outdated archive notices from 2020-2024 unless 2025/2026/2027 is mentioned
@@ -128,8 +144,8 @@ def scrape_state_website(state: str, config: dict) -> List[Dict]:
                 if has_old_year and not has_current_year:
                     continue
 
-                pdf_link = resolved_url if is_pdf else ""
-                apply_link = resolved_url if not is_pdf else url
+                pdf_link = resolved_url if is_doc else ""
+                apply_link = resolved_url if not is_doc else url
 
                 notif_id = generate_notification_id(state, text)
                 if notif_id in seen_ids:

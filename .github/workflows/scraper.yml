@@ -2,9 +2,8 @@ name: NMMS Auto Scraper & Telegram Poster
 
 on:
   schedule:
-    # Runs 4 times a day (IST times: 9:30 AM, 2:30 PM, 6:30 PM, 9:30 PM)
-    # Converted to UTC: 04:00, 09:00, 13:00, 16:00
-    - cron: '0 4,9,13,16 * * *'
+    # Runs every 2 hours (12 times a day) so new notifications are caught quickly
+    - cron: '0 */2 * * *'
   workflow_dispatch: # Allows manual trigger button in GitHub Actions tab anytime!
 
 jobs:

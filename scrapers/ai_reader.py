@@ -16,6 +16,7 @@ HEADERS = {
 def extract_content_from_url(url: str, max_chars: int = 4000) -> str:
     """
     Extracts text whether the URL points to a PDF or an HTML webpage.
+    Safely skips parsing raw binary images.
     """
     if not url or not url.startswith("http"):
         return ""
@@ -26,9 +27,14 @@ def extract_content_from_url(url: str, max_chars: int = 4000) -> str:
             return ""
 
         content_type = resp.headers.get("Content-Type", "").lower()
+        url_lower = url.lower()
+
+        # Handle image files (.jpg, .jpeg, .png, etc.) - don't parse binary as HTML
+        if any(url_lower.endswith(ext) for ext in [".jpg", ".jpeg", ".png", ".webp"]) or "image" in content_type:
+            return ""
 
         # Handle PDF Circulars
-        if "pdf" in content_type or url.lower().endswith(".pdf"):
+        if "pdf" in content_type or url_lower.endswith(".pdf"):
             pdf_file = io.BytesIO(resp.content)
             reader = PdfReader(pdf_file)
             text = ""
