@@ -19,7 +19,7 @@ def is_already_posted(notification_id: str) -> bool:
     except Exception:
         return False
 
-def record_posted(notification_id: str, state: str, title: str, apply_link: str, pdf_link: str, last_date: str = ""):
+def record_posted(notification_id: str, state: str, title: str, apply_link: str, pdf_link: str, last_date: str = "", message_id: int = None):
     _ensure_file()
     try:
         with open(DATA_FILE, "r", encoding="utf-8") as f:
@@ -33,6 +33,7 @@ def record_posted(notification_id: str, state: str, title: str, apply_link: str,
         "apply_link": apply_link,
         "pdf_link": pdf_link,
         "last_date": last_date,
+        "message_id": message_id,
         "posted_at": datetime.now().isoformat()
     }
 

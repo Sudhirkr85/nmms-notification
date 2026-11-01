@@ -5,10 +5,11 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def send_telegram_message(text: str, apply_url: str = None, pdf_url: str = None, btn_text: str = None) -> bool:
+def send_telegram_message(text: str, apply_url: str = None, pdf_url: str = None, btn_text: str = None) -> int:
     """
     Sends message to the Telegram channel using Telegram Bot API.
     Supports smart dynamic contextual button labels (PDFs, Images, and Web Portals).
+    Returns message_id on success, 0 on failure.
     """
     token = os.getenv("TELEGRAM_BOT_TOKEN")
     channel_id = os.getenv("TELEGRAM_CHANNEL_ID")
@@ -19,7 +20,7 @@ def send_telegram_message(text: str, apply_url: str = None, pdf_url: str = None,
             print(f"[SIMULATED POST TO TELEGRAM]:\n{text}\n")
         except UnicodeEncodeError:
             print(f"[SIMULATED POST TO TELEGRAM (emojis masked for Windows terminal)]:\n{text.encode('ascii', 'replace').decode('ascii')}\n")
-        return False
+        return 0
 
     api_url = f"https://api.telegram.org/bot{token}/sendMessage"
 
@@ -43,7 +44,7 @@ def send_telegram_message(text: str, apply_url: str = None, pdf_url: str = None,
         buttons.append({"text": doc_label, "url": clean_pdf})
 
     if clean_apply and clean_apply.startswith("http") and clean_apply != clean_pdf:
-        portal_label = "🌐 Official Portal" if clean_pdf else (btn_text if btn_text else "🌐 View Official Portal")
+        portal_label = btn_text if (btn_text and not clean_pdf) else "🌐 Official Portal"
         buttons.append({"text": portal_label, "url": clean_apply})
 
     for b in buttons:
@@ -56,11 +57,36 @@ def send_telegram_message(text: str, apply_url: str = None, pdf_url: str = None,
         response = requests.post(api_url, data=payload, timeout=15)
         res_data = response.json()
         if res_data.get("ok"):
-            logger.info("Successfully posted to Telegram channel.")
-            return True
+            msg_id = res_data.get("result", {}).get("message_id", 1)
+            logger.info(f"Successfully posted to Telegram channel. Message ID: {msg_id}")
+            return msg_id
         else:
             logger.error(f"Telegram API Error: {res_data}")
-            return False
+            return 0
     except Exception as e:
         logger.error(f"Failed to post to Telegram: {e}")
+        return 0
+
+def delete_telegram_message(message_id: int) -> bool:
+    """
+    Deletes a message from the Telegram channel using Telegram Bot API.
+    """
+    token = os.getenv("TELEGRAM_BOT_TOKEN")
+    channel_id = os.getenv("TELEGRAM_CHANNEL_ID")
+
+    if not token or not channel_id or not message_id:
+        return False
+
+    api_url = f"https://api.telegram.org/bot{token}/deleteMessage"
+    try:
+        resp = requests.post(api_url, json={"chat_id": channel_id, "message_id": message_id}, timeout=10)
+        res_data = resp.json()
+        if res_data.get("ok"):
+            logger.info(f"Successfully deleted Telegram message ID: {message_id}")
+            return True
+        else:
+            logger.debug(f"Could not delete message ID {message_id}: {res_data}")
+            return False
+    except Exception as e:
+        logger.warning(f"Error deleting message {message_id}: {e}")
         return False

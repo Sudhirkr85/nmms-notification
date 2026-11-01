@@ -12,7 +12,7 @@ from scrapers.portal_scraper import scrape_state_website
 from scrapers.central_scraper import scrape_central_nsp, extract_date_from_headline
 from scrapers.ai_reader import analyze_notice_with_groq
 from bot.formatter import format_nmms_notification, detect_notification_category
-from bot.telegram_poster import send_telegram_message
+from bot.telegram_poster import send_telegram_message, delete_telegram_message
 from bot.reminder import check_and_send_reminders
 
 logging.basicConfig(
@@ -21,13 +21,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-def process_and_post_notice(notice: dict) -> bool:
+def process_and_post_notice(notice: dict) -> int:
     """
     Takes a notice dictionary, analyzes with AI, formats message, and sends to Telegram.
+    Returns message_id on success, 0 on skip/failure.
     """
     notif_id = notice["id"]
     if is_already_posted(notif_id):
-        return False
+        return 0
 
     state = notice["state"]
     logger.info(f"   -> NEW NOTIFICATION FOUND: '{notice['title']}' ({state})")
@@ -51,6 +52,14 @@ def process_and_post_notice(notice: dict) -> bool:
     # Category detection for smart button
     category_info = detect_notification_category(final_title, final_update_type)
 
+    # For Central / NSP, always guarantee official portal apply link
+    if "central" in state.lower() or "nsp" in state.lower():
+        apply_url = "https://scholarships.gov.in"
+        pdf_url = ""
+    else:
+        apply_url = notice.get("apply_link")
+        pdf_url = notice.get("pdf_link")
+
     # Format clean short Telegram message with Bilingual AI highlights
     message_text = format_nmms_notification(
         state=notice["state"],
@@ -60,8 +69,8 @@ def process_and_post_notice(notice: dict) -> bool:
         apply_start=final_start,
         last_date=final_last,
         exam_date=final_exam,
-        apply_link=notice.get("apply_link", ""),
-        pdf_link=notice.get("pdf_link", ""),
+        apply_link=apply_url or "https://scholarships.gov.in",
+        pdf_link=pdf_url or "",
         highlights_en=ai_data.get("highlights_en", []),
         highlights_hi=ai_data.get("highlights_hi", []),
         summary_en=ai_data.get("summary_en", ""),
@@ -69,25 +78,25 @@ def process_and_post_notice(notice: dict) -> bool:
     )
 
     # Post to Telegram Channel
-    posted = send_telegram_message(
+    msg_id = send_telegram_message(
         text=message_text,
-        apply_url=notice.get("apply_link"),
-        pdf_url=notice.get("pdf_link"),
+        apply_url=apply_url,
+        pdf_url=pdf_url,
         btn_text=category_info.get("action_btn")
     )
 
-    if posted:
-        # Mark as posted in JSON history only when actually sent
+    if msg_id:
         record_posted(
             notification_id=notif_id,
             state=notice["state"],
             title=notice["title"],
-            apply_link=notice.get("apply_link", ""),
-            pdf_link=notice.get("pdf_link", ""),
-            last_date=final_last or notice.get("last_date", "")
+            apply_link=apply_url or "",
+            pdf_link=pdf_url or "",
+            last_date=final_last or notice.get("last_date", ""),
+            message_id=msg_id
         )
-        return True
-    return False
+        return msg_id
+    return 0
 
 def run_nmms_pipeline():
     logger.info("Checking urgent last-date reminders first...")
@@ -102,13 +111,16 @@ def run_nmms_pipeline():
     logger.info("Checking Central / National Scholarship Portal (NSP) & Ministry updates...")
     try:
         central_notices = scrape_central_nsp()
-        central_new_posts = 0
         for c_notice in central_notices:
-            if process_and_post_notice(c_notice):
+            msg_id = process_and_post_notice(c_notice)
+            if msg_id:
                 new_posts += 1
-                central_new_posts += 1
-                if central_new_posts >= 2:
-                    break
+                # Automatically attempt to delete previous duplicate bot messages if replacing
+                for offset in [1, 2, 3]:
+                    prev_id = msg_id - offset
+                    if prev_id > 0:
+                        delete_telegram_message(prev_id)
+                break  # Strictly only 1 Central notification per event
     except Exception as e:
         logger.warning(f"Central NSP check error: {e}")
 
@@ -123,7 +135,8 @@ def run_nmms_pipeline():
         state_new_posts = 0
 
         for notice in found_notices:
-            if process_and_post_notice(notice):
+            msg_id = process_and_post_notice(notice)
+            if msg_id:
                 new_posts += 1
                 state_new_posts += 1
                 if state_new_posts >= 2:

@@ -35,7 +35,7 @@ def detect_notification_category(title: str, update_type: str = ""):
         return {
             "type": "DATE_EXTENSION",
             "badge": "⏰ <b>NMMS LAST DATE EXTENDED</b>",
-            "action_btn": "🌐 Apply on NSP Portal" if ("nsp" in combined or "central" in combined) else "🌐 Apply Extended Form",
+            "action_btn": "🌐 Apply on Official NSP Portal" if ("nsp" in combined or "central" in combined) else "🌐 Apply Extended Form",
             "summary": "Application deadline has been extended! Students who missed earlier can now apply."
         }
 
@@ -87,10 +87,18 @@ def format_nmms_notification(
     summary_hi: str = ""
 ) -> str:
     """
-    Smart contextual notification with English & Hindi bilingual AI bullet points and clear dates.
+    Smart contextual notification with English & Hindi bilingual AI bullet points and clear official links.
     """
     category = detect_notification_category(title, update_type)
-    target_link = pdf_link if (pdf_link and pdf_link.startswith("http")) else apply_link
+    is_central = ("central" in state.lower() or "nsp" in state.lower() or "nsp" in authority.lower())
+
+    if is_central:
+        target_link = "https://scholarships.gov.in"
+        link_caption = "🔗 Official NSP Portal: scholarships.gov.in"
+    else:
+        target_link = pdf_link if (pdf_link and pdf_link.startswith("http")) else apply_link
+        link_caption = "🔗 Click Here to View / Download Notice"
+
     if not target_link or not target_link.startswith("http"):
         target_link = "https://scholarships.gov.in"
 
@@ -118,7 +126,6 @@ def format_nmms_notification(
 
     # Contextual dates content
     has_dates = bool(apply_start or last_date or exam_date)
-    is_central = ("central" in state.lower() or "nsp" in state.lower() or "nsp" in authority.lower())
 
     dates_content = ""
     if is_central:
@@ -145,7 +152,7 @@ def format_nmms_notification(
 📝 <b>Notice:</b> <b>{safe_title}</b>
 
 {summary_block}{dates_content}━━━━━━━━━━━━━━━━━━━━━
-👉 <a href="{target_link}"><b>🔗 Click Here to View / Download Notice</b></a>
+👉 <a href="{target_link}"><b>{link_caption}</b></a>
 
 ━━━━━━━━━━━━━━━━━━━━━
 🎓 <b>Sagar Coaching Centre, Bhagwanpur</b>
