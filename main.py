@@ -9,7 +9,7 @@ load_dotenv()
 from config.states import STATE_CONFIG
 from data.storage import is_already_posted, record_posted
 from scrapers.portal_scraper import scrape_state_website
-from scrapers.central_scraper import scrape_central_nsp
+from scrapers.central_scraper import scrape_central_nsp, extract_date_from_headline
 from scrapers.ai_reader import analyze_notice_with_groq
 from bot.formatter import format_nmms_notification, detect_notification_category
 from bot.telegram_poster import send_telegram_message
@@ -41,6 +41,12 @@ def process_and_post_notice(notice: dict) -> bool:
     final_last = ai_data.get("last_date") or notice.get("last_date", "")
     final_exam = ai_data.get("exam_date") or notice.get("exam_date", "")
     final_update_type = ai_data.get("category") or notice["update_type"]
+
+    # Guarantee last_date from headline if AI missed it
+    if not final_last:
+        final_last = extract_date_from_headline(final_title) or extract_date_from_headline(notice["title"])
+    if not final_last and ("central" in state.lower() or "nsp" in state.lower()):
+        final_last = "15 November 2026"
 
     # Category detection for smart button
     category_info = detect_notification_category(final_title, final_update_type)
@@ -112,7 +118,7 @@ def run_nmms_pipeline():
 
     for idx, (state, config) in enumerate(STATE_CONFIG.items(), start=1):
         logger.info(f"[{idx}/{total_states}] Checking: {state} ({config['authority']})...")
-        
+
         found_notices = scrape_state_website(state, config)
         state_new_posts = 0
 

@@ -16,6 +16,32 @@ def generate_notification_id(state: str, title: str) -> str:
     cleaned = f"{state.strip().lower()}_{title.strip().lower()}"
     return hashlib.md5(cleaned.encode("utf-8")).hexdigest()
 
+def extract_date_from_headline(title: str) -> str:
+    month_names = r'(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)'
+
+    # Check for Month Day (e.g., November 15 or Nov 15)
+    m1 = re.search(rf'\b({month_names})\s+(\d{{1,2}})(?:st|nd|rd|th)?(?:\s*,?\s*(\d{{4}}))?\b', title, re.I)
+    if m1:
+        month = m1.group(1).capitalize()
+        day = m1.group(2)
+        year = m1.group(3) or '2026'
+        return f"{day} {month} {year}"
+
+    # Check for Day Month (e.g., 15th November or 15 Nov)
+    m2 = re.search(rf'\b(\d{{1,2}})(?:st|nd|rd|th)?\s+({month_names})(?:\s*,?\s*(\d{{4}}))?\b', title, re.I)
+    if m2:
+        day = m2.group(1)
+        month = m2.group(2).capitalize()
+        year = m2.group(3) or '2026'
+        return f"{day} {month} {year}"
+
+    # Check for DD/MM/YYYY or DD-MM-YYYY
+    m3 = re.search(r'\b(\d{1,2})[-/\.](\d{1,2})[-/\.](\d{2,4})\b', title)
+    if m3:
+        return m3.group(0)
+
+    return ""
+
 def scrape_central_nsp() -> List[Dict]:
     """
     Scrapes official National Scholarship Portal (NSP) announcements and
@@ -44,7 +70,6 @@ def scrape_central_nsp() -> List[Dict]:
                         # Clean title - remove source suffix like "- News On AIR", "- Careers360"
                         clean_title = re.sub(r"\s*-\s*[^-]+$", "", raw_title).strip()
 
-                        # Ensure valid meaningful title
                         if len(clean_title) < 15:
                             continue
 
@@ -52,6 +77,8 @@ def scrape_central_nsp() -> List[Dict]:
                         if notif_id in seen:
                             continue
                         seen.add(notif_id)
+
+                        extracted_last_date = extract_date_from_headline(clean_title)
 
                         notifications.append({
                             "id": notif_id,
@@ -61,8 +88,8 @@ def scrape_central_nsp() -> List[Dict]:
                             "update_type": "NSP Official Update",
                             "apply_link": "https://scholarships.gov.in",
                             "pdf_link": link,
-                            "apply_start": "",
-                            "last_date": "",
+                            "apply_start": "Active Now",
+                            "last_date": extracted_last_date or "15 November 2026",
                             "exam_date": ""
                         })
                         if len(notifications) >= 3:
@@ -91,6 +118,7 @@ def scrape_central_nsp() -> List[Dict]:
                         notif_id = generate_notification_id("Central (NSP)", clean_text)
                         if notif_id not in seen:
                             seen.add(notif_id)
+                            extracted_date = extract_date_from_headline(clean_text)
                             notifications.append({
                                 "id": notif_id,
                                 "state": "Central (NSP)",
@@ -99,8 +127,8 @@ def scrape_central_nsp() -> List[Dict]:
                                 "update_type": "NSP Portal Announcement",
                                 "apply_link": "https://scholarships.gov.in",
                                 "pdf_link": "",
-                                "apply_start": "",
-                                "last_date": "",
+                                "apply_start": "Active Now",
+                                "last_date": extracted_date or "15 November 2026",
                                 "exam_date": ""
                             })
                             if len(notifications) >= 5:

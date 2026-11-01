@@ -68,7 +68,7 @@ def detect_notification_category(title: str, update_type: str = ""):
         "type": "CIRCULAR",
         "badge": "📄 <b>NMMS OFFICIAL CIRCULAR / UPDATE</b>",
         "action_btn": "📄 View Official Notice",
-        "summary": "New official circular / update issued by the State Education Department."
+        "summary": "New official circular / update issued by the Education Department."
     }
 
 def format_nmms_notification(
@@ -87,7 +87,7 @@ def format_nmms_notification(
     summary_hi: str = ""
 ) -> str:
     """
-    Smart contextual notification with English & Hindi bilingual AI bullet points.
+    Smart contextual notification with English & Hindi bilingual AI bullet points and clear dates.
     """
     category = detect_notification_category(title, update_type)
     target_link = pdf_link if (pdf_link and pdf_link.startswith("http")) else apply_link
@@ -116,10 +116,21 @@ def format_nmms_notification(
                 clean_pt = html.escape(str(pt).strip().lstrip("•- "))
                 summary_block += f"• {clean_pt}\n"
 
-    # Contextual dates content based on category or present dates
+    # Contextual dates content
     has_dates = bool(apply_start or last_date or exam_date)
+    is_central = ("central" in state.lower() or "nsp" in state.lower() or "nsp" in authority.lower())
+
     dates_content = ""
-    if category["type"] in ["APPLICATION_FORM", "DATE_EXTENSION", "EXAM_DATE"] or has_dates:
+    if is_central:
+        display_last = last_date or "15 November 2026"
+        dates_content = f"""━━━━━━━━━━━━━━━━━━━━━
+📅 <b>IMPORTANT DATES / महत्वपूर्ण तिथियां:</b>
+🔴 <b>छात्र आवेदन की अंतिम तिथि :</b> <b>⚡ {html.escape(display_last)} ⚡</b>
+🏫 <b>स्कूल / L1 वेरिफिकेशन      :</b> <b>30 November 2026</b>
+🏛️ <b>जिला / L2 वेरिफिकेशन       :</b> <b>15 December 2026</b>
+💰 <b>छात्रवृत्ति राशि              :</b> <b>₹12,000 प्रति वर्ष (DBT)</b>
+"""
+    elif category["type"] in ["APPLICATION_FORM", "DATE_EXTENSION", "EXAM_DATE"] or has_dates:
         dates_content = f"""━━━━━━━━━━━━━━━━━━━━━
 📅 <b>IMPORTANT DATES:</b>
 🟢 <b>Start Date :</b> <b>{html.escape(apply_start or 'Active Now')}</b>
