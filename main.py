@@ -12,7 +12,7 @@ from scrapers.portal_scraper import scrape_state_website
 from scrapers.central_scraper import scrape_central_nsp, extract_date_from_headline
 from scrapers.ai_reader import analyze_notice_with_groq
 from bot.formatter import format_nmms_notification, detect_notification_category
-from bot.telegram_poster import send_telegram_message, delete_telegram_message
+from bot.telegram_poster import send_telegram_message
 from bot.reminder import check_and_send_reminders
 
 logging.basicConfig(
@@ -115,11 +115,6 @@ def run_nmms_pipeline():
             msg_id = process_and_post_notice(c_notice)
             if msg_id:
                 new_posts += 1
-                # Automatically attempt to delete previous duplicate bot messages if replacing
-                for offset in [1, 2, 3]:
-                    prev_id = msg_id - offset
-                    if prev_id > 0:
-                        delete_telegram_message(prev_id)
                 break  # Strictly only 1 Central notification per event
     except Exception as e:
         logger.warning(f"Central NSP check error: {e}")
