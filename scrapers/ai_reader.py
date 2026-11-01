@@ -117,12 +117,12 @@ def get_fallback_highlights(category: str) -> dict:
             "en": [
                 "NMMS scholarship online application deadline has been officially extended.",
                 "Great opportunity for eligible students who could not complete registration earlier.",
-                "Complete online registration and submit documents to school before the extended date."
+                "Complete online registration and submit documents before the extended date."
             ],
             "hi": [
                 "NMMS छात्रवृत्ति ऑनलाइन आवेदन की अंतिम तिथि आगे बढ़ा दी गई है।",
                 "जो छात्र पहले आवेदन नहीं कर पाए थे, उनके लिए फॉर्म भरने का यह सुनहरा मौका है।",
-                "अंतिम तिथि से पहले ऑनलाइन आवेदन पूरा कर आवश्यक दस्तावेज स्कूल में जमा करें।"
+                "अंतिम तिथि से पहले ऑनलाइन आवेदन पूरा कर आवश्यक दस्तावेज जमा करें।"
             ]
         }
     elif "QUESTION" in cat:
@@ -141,20 +141,20 @@ def get_fallback_highlights(category: str) -> dict:
     else:
         return {
             "en": [
-                "Official notification issued by the State Examination Board / SCERT.",
+                "Official notification issued by the Education Department / Authority.",
                 "All concerned students, teachers, and school heads should review the instructions.",
                 "Check the official portal link below for complete circular details."
             ],
             "hi": [
-                "राज्य शिक्षा बोर्ड / SCERT द्वारा आधिकारिक सूचना एवं दिशा-निर्देश जारी।",
+                "शिक्षा विभाग / संबंधित प्राधिकारी द्वारा आधिकारिक सूचना एवं दिशा-निर्देश जारी।",
                 "संबंधित सभी छात्र, शिक्षक एवं विद्यालय प्रधान निर्देशों का अध्ययन अवश्य करें।",
-                "विस्तृत जानकारी हेतु नीचे दिए गए लिंक से आधिकारिक नोटिस डाउनलोड करें।"
+                "विस्तृत जानकारी हेतु नीचे दिए गए लिंक से आधिकारिक नोटिस देखें।"
             ]
         }
 
 def analyze_notice_with_groq(state: str, title: str, notice_url: str = "") -> dict:
     """
-    Uses Groq AI (qwen/qwen3.8-27b) to deeply understand the notice and extract exact dates & category.
+    Uses Groq AI to deeply understand the notice and extract exact dates & category.
     Guarantees robust bilingual highlights even on partial or missing responses.
     """
     api_key = os.getenv("GROQ_API_KEY")
@@ -204,35 +204,41 @@ Return ONLY valid JSON with this exact structure:
 }
 Important: Output ONLY the JSON object, no markdown code fence, no text outside JSON."""
 
-    try:
-        client = Groq(api_key=api_key)
-        chat_completion = client.chat.completions.create(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": combined_input}
-            ],
-            model="qwen/qwen3.8-27b",
-            temperature=0.1,
-            response_format={"type": "json_object"}
-        )
-        response_text = chat_completion.choices[0].message.content
-        data = json.loads(response_text)
+    client = Groq(api_key=api_key)
+    models_to_try = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "qwen/qwen3.8-27b"]
 
-        # Normalize string "null" or "None" in date fields to None
-        for df in ["start_date", "last_date", "exam_date"]:
-            val = data.get(df)
-            if isinstance(val, str) and val.strip().lower() in ["null", "none", "n/a", ""]:
-                data[df] = None
-        
-        # Verify and supplement highlights if empty
-        category = data.get("category", "CIRCULAR")
-        fallback = get_fallback_highlights(category)
-        if not data.get("highlights_en") or not isinstance(data.get("highlights_en"), list) or len(data.get("highlights_en")) == 0:
-            data["highlights_en"] = fallback["en"]
-        if not data.get("highlights_hi") or not isinstance(data.get("highlights_hi"), list) or len(data.get("highlights_hi")) == 0:
-            data["highlights_hi"] = fallback["hi"]
+    for model_name in models_to_try:
+        try:
+            chat_completion = client.chat.completions.create(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": combined_input}
+                ],
+                model=model_name,
+                temperature=0.1,
+                response_format={"type": "json_object"}
+            )
+            response_text = chat_completion.choices[0].message.content
+            data = json.loads(response_text)
 
-        return data
-    except Exception as e:
-        logger.error(f"Groq AI analysis error: {e}")
-        return {}
+            # Normalize string "null" or "None" in date fields to None
+            for df in ["start_date", "last_date", "exam_date"]:
+                val = data.get(df)
+                if isinstance(val, str) and val.strip().lower() in ["null", "none", "n/a", ""]:
+                    data[df] = None
+            
+            # Verify and supplement highlights if empty
+            category = data.get("category", "CIRCULAR")
+            fallback = get_fallback_highlights(category)
+            if not data.get("highlights_en") or not isinstance(data.get("highlights_en"), list) or len(data.get("highlights_en")) == 0:
+                data["highlights_en"] = fallback["en"]
+            if not data.get("highlights_hi") or not isinstance(data.get("highlights_hi"), list) or len(data.get("highlights_hi")) == 0:
+                data["highlights_hi"] = fallback["hi"]
+
+            return data
+        except Exception as e:
+            logger.warning(f"Groq model {model_name} error: {e}")
+            continue
+
+    logger.error("All Groq AI models failed or rate limited.")
+    return {}

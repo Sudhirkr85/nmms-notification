@@ -31,11 +31,11 @@ def detect_notification_category(title: str, update_type: str = ""):
             "summary": "Official Provisional Answer Key released. Check answers and file objections if any."
         }
 
-    if any(k in combined for k in ["extended", "extension", "last date extend", "date badha", "date_extension"]):
+    if any(k in combined for k in ["extended", "extension", "extends", "extend", "last date extend", "deadline", "date badha", "date_extension"]):
         return {
             "type": "DATE_EXTENSION",
             "badge": "⏰ <b>NMMS LAST DATE EXTENDED</b>",
-            "action_btn": "🌐 Apply Extended Form",
+            "action_btn": "🌐 Apply on NSP Portal" if ("nsp" in combined or "central" in combined) else "🌐 Apply Extended Form",
             "summary": "Application deadline has been extended! Students who missed earlier can now apply."
         }
 
