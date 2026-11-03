@@ -1,23 +1,5 @@
 {
   "posted": {
-    "74e405679964d0014fda4ce57a12b650": {
-      "state": "Central (NSP)",
-      "title": "Education Ministry Extends NMMSS Scholarship Deadline for Govt-Aided Schools: Check Revised Schedule",
-      "apply_link": "https://scholarships.gov.in",
-      "pdf_link": "",
-      "last_date": "31 Oct 2026",
-      "message_id": 98,
-      "posted_at": "2026-11-03T03:24:26.609947"
-    },
-    "dd5d1eca07aafa73b3d5d6eb42feea63": {
-      "state": "Uttar Pradesh",
-      "title": "NMMS 2027-28",
-      "apply_link": "https://entdata.co.in/NMMS202728/c2.php",
-      "pdf_link": "",
-      "last_date": "",
-      "message_id": 99,
-      "posted_at": "2026-11-03T03:24:33.495211"
-    },
     "1d18995a4e84faa9435a9fc2bb42c7b1": {
       "state": "Maharashtra",
       "title": "NMMS Exam 2026-27 Online Form",
@@ -26,15 +8,6 @@
       "last_date": "",
       "message_id": 100,
       "posted_at": "2026-11-03T03:24:50.852463"
-    },
-    "387fa86236cad6ee15e92a490688e9da": {
-      "state": "Maharashtra",
-      "title": "NMMS Exam 2024-25 Result\r\n                    (à¤¨à¤¿à¤à¤¾à¤²)",
-      "apply_link": "https://2025.mscenmms.in/result/",
-      "pdf_link": "",
-      "last_date": "15 November 2026",
-      "message_id": 101,
-      "posted_at": "2026-11-03T03:25:47.631732"
     },
     "79d79c31f5f7f009fb92725ee685fd63": {
       "state": "Gujarat",
@@ -54,24 +27,6 @@
       "message_id": 103,
       "posted_at": "2026-11-03T03:26:20.774265"
     },
-    "938dcf8166f3a2c246f2eb63b00b4578": {
-      "state": "Punjab",
-      "title": "Regarding NMMSS & PSTSE â Letter to DEOs",
-      "apply_link": "https://ssapunjab.org",
-      "pdf_link": "https://download.ssapunjab.org/sub/instructions/2026/January/RegardingNMMSSPSTSELetterToDEOS.pdf",
-      "last_date": "",
-      "message_id": 104,
-      "posted_at": "2026-11-03T03:26:32.290024"
-    },
-    "8c1044f4c3b443bb4c0d1be84b39917d": {
-      "state": "Punjab",
-      "title": "NMMSS 8th Question Paper",
-      "apply_link": "https://ssapunjab.org",
-      "pdf_link": "https://download.ssapunjab.org/sub/instructions/2026/January/NMMSS8thQuestiOnPaper.pdf",
-      "last_date": "",
-      "message_id": 105,
-      "posted_at": "2026-11-03T03:26:49.426686"
-    },
     "69510bd6e2574589af84812572171237": {
       "state": "Tamil Nadu",
       "title": "National Means Cum Merit Scholarship Scheme Examination",
@@ -81,41 +36,14 @@
       "message_id": 106,
       "posted_at": "2026-11-03T03:28:07.044748"
     },
-    "b11d2bcc6cf07d9abd0473f546533936": {
+    "74e405679964d0014fda4ce57a12b650": {
       "state": "Central (NSP)",
-      "title": "Union Education Ministry extends NMMSS scholarship application deadline till Nov 15",
+      "title": "Last date for submission of applications under the National Means-cum-Merit Scholarship Scheme for academic year 2026-27 extended till November 15, 2026",
       "apply_link": "https://scholarships.gov.in",
       "pdf_link": "",
-      "last_date": "15 Nov 2026",
-      "message_id": 107,
-      "posted_at": "2026-11-03T11:45:40.786624"
-    },
-    "6e170962b25395f693ad55788eb923bc": {
-      "state": "Gujarat",
-      "title": "નેશનલ મીન્સ કમ મેરીટ સ્કોલરશીપ યોજના (NMMS)-૨૦૨૫-૨૬ જાહેરનામું",
-      "apply_link": "https://sebexam.org",
-      "pdf_link": "https://sebexam.org/AdvertiseFiles/2025/nmms%20exam-2025-26%20notification_112025.pdf",
-      "last_date": "",
-      "message_id": 108,
-      "posted_at": "2026-11-03T11:46:00.967310"
-    },
-    "417d78ab661a71ec6d47cd139bb9f479": {
-      "state": "Punjab",
-      "title": "Regarding Public Notice for Time Change of NMMSS & PSTSE Exams",
-      "apply_link": "https://ssapunjab.org",
-      "pdf_link": "http://download.ssapunjab.org/sub/instructions/2026/January/Regarding%20Public%20Notice%20for%20time%20change%20of%20NMMSS%20&%20PSTSE%20Exams..pdf",
-      "last_date": "",
-      "message_id": 109,
-      "posted_at": "2026-11-03T11:46:11.382716"
-    },
-    "e9932a41823f73b4afb3edb06de562d7": {
-      "state": "Punjab",
-      "title": "Public Notice for NMMSS PSTSE Exams",
-      "apply_link": "https://ssapunjab.org",
-      "pdf_link": "http://download.ssapunjab.org/sub/instructions/2025/November/Public%20Notice%20for%20NMMSS%20PSTSE%20Exams.pdf",
-      "last_date": "",
-      "message_id": 110,
-      "posted_at": "2026-11-03T11:47:16.347484"
+      "last_date": "2026-11-15",
+      "message_id": 111,
+      "posted_at": "2026-11-03T12:46:50.564075"
     }
   },
   "reminders_sent": {}
