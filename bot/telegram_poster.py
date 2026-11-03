@@ -2,12 +2,17 @@ import os
 import requests
 import json
 import logging
+from urllib.parse import urlsplit
 
 logger = logging.getLogger(__name__)
 
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+}
+
 def send_telegram_message(text: str, apply_url: str = None, pdf_url: str = None, btn_text: str = None) -> int:
     """
-    Sends message to the Telegram channel using Telegram Bot API.
+    Sends message to the Telegram channel/group using Telegram Bot API.
     Supports smart dynamic contextual button labels (PDFs, Images, and Web Portals).
     Returns message_id on success, 0 on failure.
     """
@@ -65,6 +70,55 @@ def send_telegram_message(text: str, apply_url: str = None, pdf_url: str = None,
             return 0
     except Exception as e:
         logger.error(f"Failed to post to Telegram: {e}")
+        return 0
+
+def send_telegram_document(doc_url: str, caption: str = "") -> int:
+    """
+    Downloads the official notice (PDF or Image) and sends it directly to the Telegram group/channel
+    as an attached document file. Subscribers get the actual official circular directly in Telegram.
+    Returns message_id on success, 0 on failure.
+    """
+    token = os.getenv("TELEGRAM_BOT_TOKEN")
+    channel_id = os.getenv("TELEGRAM_CHANNEL_ID")
+
+    if not token or not channel_id or not doc_url or not doc_url.startswith("http"):
+        return 0
+
+    try:
+        resp = requests.get(doc_url, headers=HEADERS, timeout=25, verify=False)
+        if resp.status_code != 200 or len(resp.content) < 500:
+            return 0
+
+        # Don't upload massive files (> 25MB)
+        if len(resp.content) > 25 * 1024 * 1024:
+            return 0
+
+        parsed_path = urlsplit(doc_url).path
+        raw_name = os.path.basename(parsed_path) or "Official_NMMS_Notice.pdf"
+        if not raw_name.lower().endswith((".pdf", ".jpg", ".jpeg", ".png")):
+            raw_name += ".pdf"
+
+        api_url = f"https://api.telegram.org/bot{token}/sendDocument"
+        mime_type = "application/pdf" if raw_name.lower().endswith(".pdf") else "image/jpeg"
+        files = {
+            "document": (raw_name, resp.content, mime_type)
+        }
+        data = {
+            "chat_id": channel_id,
+            "caption": caption[:1000] if caption else "",
+            "parse_mode": "HTML"
+        }
+        r = requests.post(api_url, data=data, files=files, timeout=35)
+        res_data = r.json()
+        if res_data.get("ok"):
+            msg_id = res_data.get("result", {}).get("message_id", 0)
+            logger.info(f"Direct official document uploaded to Telegram. Message ID: {msg_id}")
+            return msg_id
+        else:
+            logger.warning(f"sendDocument error: {res_data}")
+            return 0
+    except Exception as e:
+        logger.warning(f"Failed uploading document to Telegram: {e}")
         return 0
 
 def delete_telegram_message(message_id: int) -> bool:

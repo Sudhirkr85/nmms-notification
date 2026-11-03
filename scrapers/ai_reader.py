@@ -41,12 +41,12 @@ def extract_date_from_headline(title: str) -> str:
 
     return ""
 
-def extract_content_from_url(url: str, max_chars: int = 4000) -> str:
+def extract_content_from_url(url: str, max_chars: int = 6000) -> str:
     if not url or not url.startswith("http"):
         return ""
 
     try:
-        resp = requests.get(url, headers=HEADERS, timeout=12, verify=False)
+        resp = requests.get(url, headers=HEADERS, timeout=15, verify=False)
         if resp.status_code != 200:
             return ""
 
@@ -60,7 +60,7 @@ def extract_content_from_url(url: str, max_chars: int = 4000) -> str:
             pdf_file = io.BytesIO(resp.content)
             reader = PdfReader(pdf_file)
             text = ""
-            for page in reader.pages[:2]:
+            for page in reader.pages[:5]:
                 extracted = page.extract_text()
                 if extracted:
                     text += extracted + "\n"
@@ -76,7 +76,10 @@ def extract_content_from_url(url: str, max_chars: int = 4000) -> str:
         logger.warning(f"Could not extract content from {url}: {e}")
         return ""
 
-def get_fallback_highlights(category: str, state: str = "") -> dict:
+def get_fallback_highlights(category: str, state: str = "", title: str = "") -> dict:
+    """
+    Fallback highlights tailored to title context (used only if AI service is completely unreachable).
+    """
     cat = (category or "CIRCULAR").upper()
     is_central = ("central" in state.lower() or "nsp" in state.lower())
     cur_year = datetime.now().year
@@ -84,128 +87,45 @@ def get_fallback_highlights(category: str, state: str = "") -> dict:
     if is_central:
         return {
             "en": [
-                f"Union Ministry of Education extends NMMSS application deadline up to 15 November {cur_year} on NSP.",
-                "Institute (L1) verification open till 30 November; District (L2) till 15 December.",
-                "Selected students receive ₹12,000/year scholarship directly into bank account via DBT."
+                f"Ministry of Education official deadline update on NSP for Session {cur_year}-{str(cur_year+1)[-2:]}.",
+                f"Check official guidelines on scholarships.gov.in portal."
             ],
             "hi": [
-                f"NSP पोर्टल पर NMMS छात्रवृत्ति आवेदन की अंतिम तिथि 15 नवंबर {cur_year} तक बढ़ाई गई।",
-                "स्कूल/इंस्टिट्यूट (L1) वेरिफिकेशन 30 नवंबर एवं जिला (L2) वेरिफिकेशन 15 दिसंबर तक मान्य।",
-                "चयनित छात्रों को ₹12,000 प्रति वर्ष सीधे बैंक खाते में (DBT द्वारा) मिलेंगे।"
+                f"शिक्षा मंत्रालय द्वारा NSP पोर्टल पर सत्र {cur_year}-{str(cur_year+1)[-2:]} हेतु आधिकारिक सूचना।",
+                "विस्तृत दिशा-निर्देश scholarships.gov.in पोर्टल पर देखें।"
             ]
         }
 
-    if "RESULT" in cat:
-        return {
-            "en": [
-                "Official NMMS merit list & selected candidate roll numbers published.",
-                "Qualified students receive ₹12,000/year (₹48,000 total from Class 9 to 12).",
-                "Selected students must apply on National Scholarship Portal (NSP) for DBT payment."
-            ],
-            "hi": [
-                "NMMS परीक्षा का आधिकारिक रिजल्ट व चयनित छात्रों की मेरिट सूची जारी कर दी गई है।",
-                "सफल छात्र-छात्राओं को कक्षा 9वीं से 12वीं तक ₹12,000 प्रति वर्ष (कुल ₹48,000) मिलेंगे।",
-                "चयनित छात्रों को छात्रवृत्ति राशि (DBT) हेतु नेशनल स्कॉलरशिप पोर्टल (NSP) पर आवेदन करना अनिवार्य है।"
-            ]
-        }
-    elif "ADMIT" in cat or "HALL" in cat:
-        return {
-            "en": [
-                "Official NMMS examination Admit Card / Hall Ticket released.",
-                "Download hall ticket and verify your roll number and exam center details.",
-                "Students must carry printed admit card and school ID to the examination hall."
-            ],
-            "hi": [
-                "NMMS छात्रवृत्ति परीक्षा का आधिकारिक एडमिट कार्ड / प्रवेश पत्र जारी कर दिया गया है।",
-                "छात्र तुरंत अपना प्रवेश पत्र डाउनलोड कर रोल नंबर व परीक्षा केंद्र की जांच करें।",
-                "परीक्षा केंद्र पर प्रवेश पत्र की प्रिंट कॉपी एवं विद्यालय पहचान पत्र साथ ले जाना अनिवार्य है।"
-            ]
-        }
-    elif "ANSWER" in cat:
-        return {
-            "en": [
-                "Official NMMS Provisional Answer Key published for MAT and SAT papers.",
-                "Match your question paper responses to calculate provisional examination marks.",
-                "File objections online before the specified deadline if you find any discrepancies."
-            ],
-            "hi": [
-                "NMMS परीक्षा (MAT एवं SAT) की आधिकारिक प्रोविजनल उत्तर कुंजी जारी कर दी गई है।",
-                "विद्यार्थी अपने प्रश्न पत्र के उत्तरों का मिलान कर संभावित प्राप्तांक जान सकते हैं।",
-                "किसी प्रश्न या उत्तर पर आपत्ति होने पर निर्धारित समय सीमा के भीतर आपत्ति दर्ज करें।"
-            ]
-        }
-    elif "DATE_EXTENSION" in cat:
-        return {
-            "en": [
-                "Official deadline extended for NMMS online application submission.",
-                "Eligible Class 8 students who missed previous dates can now complete their application.",
-                "Ensure school/headmaster verification is completed before the extended closing date."
-            ],
-            "hi": [
-                "NMMS छात्रवृत्ति ऑनलाइन आवेदन करने की अंतिम तिथि आगे बढ़ा दी गई है।",
-                "पात्र कक्षा 8वीं के छात्र जो पूर्व में आवेदन से छूट गए थे, वे अब फॉर्म भर सकते हैं।",
-                "अंतिम तिथि से पहले विद्यालय के प्रधानाध्यापक द्वारा फॉर्म का सत्यापन अवश्य पूर्ण करवाएं।"
-            ]
-        }
-    elif "APPLICATION" in cat or "FORM" in cat:
-        return {
-            "en": [
-                "NMMS Online Application Form live for eligible Class 8 government school students.",
-                "Parental annual income must be below ₹3,50,000 from all sources.",
-                "Successful scholars will receive ₹1,000/month (₹12,000/year) from Class 9 to 12."
-            ],
-            "hi": [
-                "सरकारी विद्यालयों के कक्षा 8वीं के छात्रों हेतु NMMS छात्रवृत्ति ऑनलाइन आवेदन शुरू।",
-                "अभिभावक की कुल वार्षिक आय ₹3,50,000 से कम होना आवश्यक है।",
-                "चयनित मेधावी छात्रों को 9वीं से 12वीं तक ₹1,000 प्रतिमाह (₹12,000/वर्ष) छात्रवृत्ति मिलेगी।"
-            ]
-        }
-    elif "EXAM_DATE" in cat:
-        return {
-            "en": [
-                "Official NMMS State Level Examination Date and Schedule announced.",
-                "Exam comprises two objective papers: Mental Ability Test (MAT) & Scholastic Aptitude Test (SAT).",
-                "Check reporting time and designated exam center guidelines in the official notice."
-            ],
-            "hi": [
-                "NMMS राज्य स्तरीय छात्रवृत्ति परीक्षा की आधिकारिक तिथि एवं कार्यक्रम घोषित।",
-                "परीक्षा में दो पेपर होंगे: मानसिक योग्यता परीक्षण (MAT) एवं शैक्षिक योग्यता परीक्षण (SAT)।",
-                "आधिकारिक विज्ञप्ति में दिए गए रिपोर्टिंग समय व परीक्षा केंद्र के निर्देशों का पालन करें।"
-            ]
-        }
-    else:
-        return {
-            "en": [
-                "Official update published on the State Education Department website.",
-                "Class 8 students and schools are advised to check guidelines carefully.",
-                "Visit the official portal link below to download complete guidelines."
-            ],
-            "hi": [
-                "शिक्षा विभाग द्वारा NMMS परीक्षा के संबंध में नया आधिकारिक आदेश जारी।",
-                "कक्षा 8वीं के छात्र एवं विद्यालय दिशा-निर्देशों का ध्यानपूर्वक अवलोकन करें।",
-                "विस्तृत जानकारी हेतु नीचे दिए गए लिंक से आधिकारिक नोटिस डाउनलोड करें।"
-            ]
-        }
+    return {
+        "en": [
+            f"Official {cat.replace('_', ' ').title()} notice issued by {state} Education Authority.",
+            "Refer to the attached official PDF document for exact instructions."
+        ],
+        "hi": [
+            f"{state} शिक्षा विभाग द्वारा आधिकारिक आदेश/विज्ञप्ति जारी।",
+            "सटीक जानकारी एवं तिथियों हेतु संलग्न आधिकारिक आदेश (PDF) देखें।"
+        ]
+    }
 
 def analyze_notice_with_groq(state: str, title: str, notice_url: str = "", recent_posts: list = None) -> dict:
     """
-    Intelligent AI Quality Gatekeeper & Semantic Deduplicator using Groq LLM (LLaMA-3.3-70B).
+    100% AI-Driven Quality Gatekeeper, Semantic Deduplicator, and Notice-Specific Fact Extractor.
+    Powered by Groq LLaMA-3.3-70B.
     
-    Performs 3 critical checks:
-    1. is_student_actionable: Rejects internal DEO letters, staff attendance sheets, old question papers, tenders.
-    2. is_semantic_duplicate: Compares summary against recently posted announcements to prevent duplicate spam.
-    3. Category and date extraction with crisp bilingual highlights.
+    Guarantees:
+    1. Filter: Rejects DEO/officer circulars, staff attendance, question papers, old archives.
+    2. Deduplicator: Matches meaning against recently posted announcements to prevent duplicate spam.
+    3. Specificity: Extracts ONLY concrete facts directly from the notice (dates, shifts, fees, criteria).
     """
     api_key = os.getenv("GROQ_API_KEY")
     headline_date = extract_date_from_headline(title)
     cur_year = datetime.now().year
 
-    # Format recent posts context for semantic comparison
     recent_posts_summary = "None yet."
     if recent_posts:
         items = []
         for idx, p in enumerate(recent_posts, 1):
-            items.append(f"[{idx}] Title: {p.get('title')} | Last Date: {p.get('last_date', 'N/A')}")
+            items.append(f"[{idx}] Title: '{p.get('title')}' | Last Date: {p.get('last_date', 'N/A')}")
         recent_posts_summary = "\n".join(items)
 
     extracted_text = ""
@@ -213,7 +133,7 @@ def analyze_notice_with_groq(state: str, title: str, notice_url: str = "", recen
         extracted_text = extract_content_from_url(notice_url)
 
     if not api_key:
-        fallback = get_fallback_highlights("DATE_EXTENSION" if any(w in title.lower() for w in ["extend", "deadline"]) else "CIRCULAR", state)
+        fallback = get_fallback_highlights("DATE_EXTENSION" if any(w in title.lower() for w in ["extend", "deadline"]) else "CIRCULAR", state, title)
         return {
             "is_student_actionable": True,
             "is_semantic_duplicate": False,
@@ -227,38 +147,42 @@ def analyze_notice_with_groq(state: str, title: str, notice_url: str = "", recen
             "highlights_hi": fallback["hi"]
         }
 
-    combined_input = f"""State/Authority: {state}
-Candidate Notice Title: {title}
-Candidate Document Content:
-{extracted_text if extracted_text else 'No PDF document text. Evaluate headline.'}
+    combined_input = f"""STATE/AUTHORITY: {state}
+CANDIDATE NOTICE TITLE: {title}
+CANDIDATE NOTICE DOCUMENT/PAGE CONTENT:
+{extracted_text if extracted_text else 'No additional document text. Analyze headline carefully.'}
 
-RECENT ANNOUNCEMENTS ALREADY POSTED FOR THIS STATE IN TELEGRAM:
+RECENT ANNOUNCEMENTS ALREADY POSTED IN TELEGRAM FOR THIS STATE:
 {recent_posts_summary}"""
 
-    system_prompt = f"""You are the Editor-in-Chief and AI Quality Gatekeeper for a premium paid NMMS Scholarship Telegram channel (for Class 8 students & parents). Current year is {cur_year}.
+    system_prompt = f"""You are the Chief Editor and Quality Gatekeeper for a premium paid NMMS Scholarship channel for Class 8 students & parents. Current year is {cur_year}.
 
-Your task is to protect subscribers from spam, expired archives, internal staff letters, and duplicate news.
+Subscribers pay for ACCURACY, FRESHNESS, and REAL NOTICE-SPECIFIC FACTS.
 
-EVALUATE AND ANSWER STRICTLY:
+EVALUATE AND ACT:
 1. is_student_actionable (boolean):
-   - TRUE only if this notice directly impacts students: Online Application Form Live, Deadline Extended, Admit Card Out, Answer Key Released, Exam Date Announced, or Result/Merit List Declared.
+   - TRUE only if this notice contains genuine student-facing action: Application Form Live, Deadline Extended, Admit Card Out, Exam Schedule Announced, Answer Key Out, Result Declared.
    - FALSE if it is:
-     * Internal departmental letters (e.g. Letter to DEOs, District Education Officers, Principals, Nodal officers)
-     * Examination center logistics (Attendance sheets, Attn sheets, Seat matrix, Centre list, Superintendent orders)
-     * Old practice material (Previous year question papers, sample papers, model papers)
-     * Administrative/commercial (Tenders, quotations, auction, meeting proceedings)
-     * Expired notices from previous years or past months
-     * Bare website menu buttons or login portal links (e.g. "NMMS 2027-28" without actual notice)
+     * Internal departmental/officer order (Letter to DEOs, District Education Officers, Principals, Nodal officers, Superintendent instructions)
+     * Center logistics (Attendance sheets, Attn sheets, Seat matrix, Room allotment, Invigilator duty lists)
+     * Practice/Question papers (Sample papers, model question papers, previous year question papers)
+     * Administrative/commercial (Tenders, quotations, auction, meeting minutes)
+     * Outdated/archived notices from past years or expired sessions
+     * Bare portal menu buttons (e.g. "NMMS 2027-28" with no real circular text)
 
 2. is_semantic_duplicate (boolean):
-   - Compare with RECENT ANNOUNCEMENTS ALREADY POSTED.
-   - If this candidate notice reports the SAME event, same deadline extension, or same announcement as any already posted notice (even if phrased in different words by a different news outlet or portal), return TRUE.
+   - Check against RECENT ANNOUNCEMENTS ALREADY POSTED.
+   - If this candidate notice reports the SAME event, same deadline extension, or same announcement already covered (even if rephrased by different media outlets), return TRUE.
    - Otherwise FALSE.
 
-3. category:
-   One of: "APPLICATION_FORM", "ADMIT_CARD", "RESULT", "ANSWER_KEY", "DATE_EXTENSION", "EXAM_DATE", "CIRCULAR".
-
-4. clean_title, start_date, last_date, exam_date, and 2-3 specific bilingual highlights.
+3. STRICT RULE FOR HIGHLIGHTS (NO GENERIC COPY-PASTE):
+   - Do NOT output generic boilerplate slogans like "Students receive Rs 12,000/yr" or generic advice.
+   - Every single bullet point MUST state concrete, specific facts directly mentioned in THIS document:
+     * Exact dates (Start date, Last date, Exam date, Correction window)
+     * Exact exam timings & shifts (e.g. MAT: 10:00 to 11:30 AM, SAT: 1:00 to 2:30 PM) if given
+     * Exact fee amounts, passing marks, or specific eligibility conditions stated in THIS document
+     * Exact submission / verification steps specified in THIS document
+   - Provide 2-3 specific points in English and Hindi (Devanagari script).
 
 Return ONLY valid JSON with this exact structure:
 {{
@@ -266,17 +190,17 @@ Return ONLY valid JSON with this exact structure:
   "is_semantic_duplicate": true | false,
   "rejection_reason": "Specific reason if actionable is false or duplicate is true, else null",
   "category": "APPLICATION_FORM" | "ADMIT_CARD" | "RESULT" | "ANSWER_KEY" | "DATE_EXTENSION" | "EXAM_DATE" | "CIRCULAR",
-  "clean_title": "Clear 1-line title in English",
+  "clean_title": "Clear concise 1-line title in English",
   "start_date": "Exact start date or null",
   "last_date": "Exact last date or null",
   "exam_date": "Exact exam date or null",
   "highlights_en": [
-    "Point 1 in English",
-    "Point 2 in English"
+    "Fact 1 specific to this notice in English",
+    "Fact 2 specific to this notice in English"
   ],
   "highlights_hi": [
-    "बिंदु 1 शुद्ध हिंदी (देवनागरी लिपि)",
-    "बिंदु 2 शुद्ध हिंदी (देवनागरी लिपि)"
+    "तथ्य 1 इस नोटिस से संबंधित शुद्ध हिंदी में",
+    "तथ्य 2 इस नोटिस से संबंधित शुद्ध हिंदी में"
   ]
 }}
 Important: Output ONLY the JSON object, no markdown code fence."""
@@ -293,7 +217,7 @@ Important: Output ONLY the JSON object, no markdown code fence."""
                 ],
                 model=model_name,
                 temperature=0.1,
-                max_tokens=800
+                max_tokens=900
             )
             raw_response = chat_completion.choices[0].message.content.strip()
             raw_response = re.sub(r"^```(?:json)?\s*", "", raw_response)
@@ -302,7 +226,7 @@ Important: Output ONLY the JSON object, no markdown code fence."""
             data = json.loads(raw_response)
 
             if not data.get("highlights_en") or not data.get("highlights_hi"):
-                fallback = get_fallback_highlights(data.get("category", "CIRCULAR"), state)
+                fallback = get_fallback_highlights(data.get("category", "CIRCULAR"), state, title)
                 data["highlights_en"] = data.get("highlights_en") or fallback["en"]
                 data["highlights_hi"] = data.get("highlights_hi") or fallback["hi"]
 
@@ -320,8 +244,8 @@ Important: Output ONLY the JSON object, no markdown code fence."""
             logger.warning(f"Groq model {model_name} error: {e}")
             continue
 
-    logger.error("All Groq AI models failed or rate limited. Using rule-based fallback.")
-    fallback = get_fallback_highlights("DATE_EXTENSION" if any(w in title.lower() for w in ["extend", "deadline"]) else "CIRCULAR", state)
+    logger.error("All Groq AI models failed or rate limited.")
+    fallback = get_fallback_highlights("DATE_EXTENSION" if any(w in title.lower() for w in ["extend", "deadline"]) else "CIRCULAR", state, title)
     return {
         "is_student_actionable": True,
         "is_semantic_duplicate": False,

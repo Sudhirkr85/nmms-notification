@@ -13,7 +13,7 @@ from scrapers.portal_scraper import scrape_state_website, is_junk_notice, is_out
 from scrapers.central_scraper import scrape_central_nsp, extract_date_from_headline
 from scrapers.ai_reader import analyze_notice_with_groq
 from bot.formatter import format_nmms_notification, detect_notification_category
-from bot.telegram_poster import send_telegram_message
+from bot.telegram_poster import send_telegram_message, send_telegram_document
 from bot.reminder import check_and_send_reminders
 from bot.cleaner import purge_bad_messages
 
@@ -29,6 +29,7 @@ def process_and_post_notice(notice: dict) -> int:
     1. Runs fast rule-based duplicate check
     2. Runs Groq LLaMA-3.3-70B AI Gatekeeper (checks student relevance & semantic deduplication against recent posts)
     3. If approved, formats bilingual message and posts to Telegram
+    4. Automatically uploads the actual official PDF document directly to Telegram
     Returns message_id on success, 0 on skip/failure.
     """
     notif_id = notice["id"]
@@ -56,15 +57,15 @@ def process_and_post_notice(notice: dict) -> int:
     # Retrieve recent announcements for this state to feed into AI Semantic Deduplicator
     recent_posts = get_recent_notices_for_state(state, limit=5)
 
-    # Groq LLaMA-3.3-70B AI Quality Gatekeeper & Semantic Deduplicator
+    # 100% Groq LLaMA-3.3-70B AI Quality Gatekeeper & Semantic Deduplicator
     ai_data = analyze_notice_with_groq(state, notice["title"], target_url, recent_posts=recent_posts)
 
-    # GATE 1: AI Student-Actionable Check
+    # GATE 1: AI Student-Actionable Check (Rejects DEO letters, question papers, attendance sheets)
     if not ai_data.get("is_student_actionable", True):
         logger.info(f"   -> [AI GATE REJECT] Not student-actionable: {ai_data.get('rejection_reason')} ('{notice['title']}')")
         return 0
 
-    # GATE 2: AI Semantic Deduplication Check (Same event reported under different headlines)
+    # GATE 2: AI Semantic Deduplication Check (Catches rephrased identical events)
     if ai_data.get("is_semantic_duplicate", False):
         logger.info(f"   -> [AI DUPLICATE REJECT] Semantic duplicate: {ai_data.get('rejection_reason')} ('{notice['title']}')")
         return 0
@@ -110,7 +111,7 @@ def process_and_post_notice(notice: dict) -> int:
         logger.info(f"   -> SKIPPING DUPLICATE (Storage verified): '{final_title}' ({state})")
         return 0
 
-    # Format clean Telegram message with Bilingual AI highlights
+    # Format clean Telegram message with Bilingual AI highlights (Notice-Specific Facts)
     message_text = format_nmms_notification(
         state=notice["state"],
         authority=notice["authority"],
@@ -146,6 +147,12 @@ def process_and_post_notice(notice: dict) -> int:
             message_id=msg_id
         )
         logger.info(f"   -> [POSTED SUCCESS] Message ID {msg_id} sent for {state}: '{final_title}'")
+
+        # Exclusive Paid Group Feature: Attach the actual official PDF document file right in Telegram
+        if pdf_url and pdf_url.startswith("http"):
+            doc_caption = f"📄 <b>Official Circular PDF:</b> <i>{final_title}</i> ({state})"
+            send_telegram_document(pdf_url, caption=doc_caption)
+
         return msg_id
     return 0
 
