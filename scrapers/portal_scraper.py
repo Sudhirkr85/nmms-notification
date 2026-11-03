@@ -4,6 +4,8 @@ import re
 import urllib3
 import hashlib
 from typing import List, Dict
+from urllib.parse import urljoin, urlparse, urlsplit, urlunsplit, quote
+from data.storage import is_already_posted
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -11,8 +13,23 @@ HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 }
 
-def generate_notification_id(state: str, title: str) -> str:
-    cleaned = f"{state.strip().lower()}_{title.strip().lower()}"
+def generate_notification_id(state: str, title: str, doc_url: str = "") -> str:
+    """
+    Generates a deterministic ID.
+    If the notification points to a document/PDF, the clean document URL is its canonical identity.
+    Otherwise, normalized semantic title is used.
+    """
+    doc_extensions = (".pdf", ".jpg", ".jpeg", ".png", ".docx", ".doc")
+    clean_doc = (doc_url or "").strip().lower()
+    clean_doc = re.sub(r"[?#].*$", "", clean_doc).rstrip("/")
+    if clean_doc and any(clean_doc.endswith(ext) for ext in doc_extensions):
+        cleaned = f"{state.strip().lower()}_{clean_doc}"
+    else:
+        # Normalize title: strip time prefixes (e.g. 126 days ago, 2 days ago), punctuation, whitespace
+        t = re.sub(r"^\s*\d+\s*(?:days?|weeks?|months?|hours?|mins?|minutes?)\s*ago\s*", "", title, flags=re.IGNORECASE)
+        t = re.sub(r"^\s*(?:new|notice|circular|📢|🔔)[\s\W]*", "", t, flags=re.IGNORECASE)
+        t = re.sub(r"\s+", " ", t).strip().lower()
+        cleaned = f"{state.strip().lower()}_{t}"
     return hashlib.md5(cleaned.encode("utf-8")).hexdigest()
 
 def extract_dates_from_text(text: str):
@@ -28,8 +45,6 @@ def extract_dates_from_text(text: str):
         matches = re.findall(p, text, re.IGNORECASE)
         found.extend(matches)
     return found
-
-from urllib.parse import urljoin, urlparse, urlsplit, urlunsplit, quote
 
 def clean_and_normalize_url(base_url: str, href: str, onclick: str = "") -> str:
     """
@@ -112,7 +127,7 @@ def scrape_state_website(state: str, config: dict) -> List[Dict]:
                     raw_text = a_tag.get("title", "").strip() or a_tag.get("aria-label", "").strip()
 
             # Strip dynamic relative time prefixes like "126 days ago" or "142 weeks ago"
-            text = re.sub(r"^[\d\s]+(?:days?|weeks?|months?|hours?|minutes?)\s+ago\s*", "", raw_text, flags=re.IGNORECASE).strip()
+            text = re.sub(r"^\s*[\d\s]+(?:days?|weeks?|months?|hours?|minutes?)\s*ago\s*", "", raw_text, flags=re.IGNORECASE).strip()
             if not text:
                 continue
 
@@ -147,12 +162,12 @@ def scrape_state_website(state: str, config: dict) -> List[Dict]:
                 pdf_link = resolved_url if is_doc else ""
                 apply_link = resolved_url if not is_doc else url
 
-                notif_id = generate_notification_id(state, text)
+                notif_id = generate_notification_id(state, text, pdf_link)
                 if notif_id in seen_ids:
                     continue
                 seen_ids.add(notif_id)
 
-                notifications.append({
+                item_data = {
                     "id": notif_id,
                     "state": state,
                     "authority": config.get("authority", "State Education Board"),
@@ -163,7 +178,13 @@ def scrape_state_website(state: str, config: dict) -> List[Dict]:
                     "apply_start": "",
                     "last_date": "",
                     "exam_date": ""
-                })
+                }
+
+                # Check multi-level duplicate protection
+                if is_already_posted(notif_id, item_data):
+                    continue
+
+                notifications.append(item_data)
                 if len(notifications) >= 5:
                     break
 

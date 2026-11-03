@@ -27,7 +27,8 @@ def process_and_post_notice(notice: dict) -> int:
     Returns message_id on success, 0 on skip/failure.
     """
     notif_id = notice["id"]
-    if is_already_posted(notif_id):
+    if is_already_posted(notif_id, notice):
+        logger.info(f"   -> SKIPPING DUPLICATE: '{notice.get('title')}' ({notice.get('state')})")
         return 0
 
     state = notice["state"]
@@ -59,6 +60,18 @@ def process_and_post_notice(notice: dict) -> int:
     else:
         apply_url = notice.get("apply_link")
         pdf_url = notice.get("pdf_link")
+
+    # Double-check duplicate after AI refinement (e.g. if title or date was normalized)
+    enriched_notice = {
+        **notice,
+        "title": final_title,
+        "last_date": final_last,
+        "pdf_link": pdf_url or "",
+        "apply_link": apply_url or ""
+    }
+    if is_already_posted(notif_id, enriched_notice):
+        logger.info(f"   -> SKIPPING DUPLICATE (Post-AI verified): '{final_title}' ({state})")
+        return 0
 
     # Format clean short Telegram message with Bilingual AI highlights
     message_text = format_nmms_notification(

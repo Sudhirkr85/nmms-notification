@@ -5,6 +5,7 @@ import re
 import urllib3
 import hashlib
 from typing import List, Dict
+from data.storage import is_already_posted
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -12,8 +13,16 @@ HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 }
 
-def generate_notification_id(state: str, title: str) -> str:
-    cleaned = f"{state.strip().lower()}_{title.strip().lower()}"
+def generate_notification_id(state: str, title: str, target_date: str = "") -> str:
+    t = title.strip().lower()
+    # If this is an extension / deadline notice with a specific date
+    if any(k in t for k in ["extend", "extended", "extension", "deadline", "last date"]) and target_date:
+        cleaned = f"{state.strip().lower()}_extension_{target_date.strip().lower()}"
+    else:
+        words = re.findall(r"\b\w{3,}\b", t)
+        stopwords = {"the", "and", "for", "with", "from", "regarding", "scholarship", "scheme", "national", "means", "nmmss", "nmms"}
+        key_words = sorted([w for w in words if w not in stopwords])
+        cleaned = f"{state.strip().lower()}_{'_'.join(key_words)}"
     return hashlib.md5(cleaned.encode("utf-8")).hexdigest()
 
 def extract_date_from_headline(title: str) -> str:
@@ -72,14 +81,13 @@ def scrape_central_nsp() -> List[Dict]:
                         if len(clean_title) < 15:
                             continue
 
-                        notif_id = generate_notification_id("Central (NSP)", clean_title)
+                        extracted_last_date = extract_date_from_headline(clean_title)
+                        notif_id = generate_notification_id("Central (NSP)", clean_title, extracted_last_date or "15 November 2026")
                         if notif_id in seen:
                             continue
                         seen.add(notif_id)
 
-                        extracted_last_date = extract_date_from_headline(clean_title)
-
-                        notifications.append({
+                        item_data = {
                             "id": notif_id,
                             "state": "Central (NSP)",
                             "authority": "Ministry of Education / NSP Portal",
@@ -90,8 +98,14 @@ def scrape_central_nsp() -> List[Dict]:
                             "apply_start": "Active Now",
                             "last_date": extracted_last_date or "15 November 2026",
                             "exam_date": ""
-                        })
-                        # Pick only 1 top notification per event to prevent duplicate posts
+                        }
+
+                        # Check if already posted before adding to notifications
+                        if is_already_posted(notif_id, item_data):
+                            continue
+
+                        notifications.append(item_data)
+                        # Pick only 1 top new notification per event to prevent duplicate posts
                         break
                 if notifications:
                     break
@@ -117,23 +131,30 @@ def scrape_central_nsp() -> List[Dict]:
                             if len(clean_text) < 20:
                                 continue
 
-                            notif_id = generate_notification_id("Central (NSP)", clean_text)
-                            if notif_id not in seen:
-                                seen.add(notif_id)
-                                extracted_date = extract_date_from_headline(clean_text)
-                                notifications.append({
-                                    "id": notif_id,
-                                    "state": "Central (NSP)",
-                                    "authority": "National Scholarship Portal (NSP)",
-                                    "title": clean_text,
-                                    "update_type": "NSP Portal Announcement",
-                                    "apply_link": "https://scholarships.gov.in",
-                                    "pdf_link": "",
-                                    "apply_start": "Active Now",
-                                    "last_date": extracted_date or "15 November 2026",
-                                    "exam_date": ""
-                                })
-                                break
+                            extracted_date = extract_date_from_headline(clean_text)
+                            notif_id = generate_notification_id("Central (NSP)", clean_text, extracted_date or "15 November 2026")
+                            if notif_id in seen:
+                                continue
+                            seen.add(notif_id)
+
+                            item_data = {
+                                "id": notif_id,
+                                "state": "Central (NSP)",
+                                "authority": "National Scholarship Portal (NSP)",
+                                "title": clean_text,
+                                "update_type": "NSP Portal Announcement",
+                                "apply_link": "https://scholarships.gov.in",
+                                "pdf_link": "",
+                                "apply_start": "Active Now",
+                                "last_date": extracted_date or "15 November 2026",
+                                "exam_date": ""
+                            }
+
+                            if is_already_posted(notif_id, item_data):
+                                continue
+
+                            notifications.append(item_data)
+                            break
                     if notifications:
                         break
             except Exception:
