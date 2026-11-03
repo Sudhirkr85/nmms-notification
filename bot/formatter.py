@@ -1,5 +1,6 @@
 import re
 import html
+from datetime import datetime
 
 def detect_notification_category(title: str, update_type: str = ""):
     """
@@ -37,14 +38,6 @@ def detect_notification_category(title: str, update_type: str = ""):
             "badge": "⏰ <b>NMMS LAST DATE EXTENDED</b>",
             "action_btn": "🌐 Apply on Official NSP Portal" if ("nsp" in combined or "central" in combined) else "🌐 Apply Extended Form",
             "summary": "Application deadline has been extended! Students who missed earlier can now apply."
-        }
-
-    if any(k in combined for k in ["question paper", "model paper", "previous year", "sample paper", "practice paper", "question_paper"]):
-        return {
-            "type": "QUESTION_PAPER",
-            "badge": "📚 <b>NMMS QUESTION / MODEL PAPER OUT</b>",
-            "action_btn": "📚 Download Question Paper",
-            "summary": "Official NMMS practice question paper uploaded for students."
         }
 
     if any(k in combined for k in ["exam date", "schedule", "time table", "pariksha tithi", "exam_date"]):
@@ -88,9 +81,11 @@ def format_nmms_notification(
 ) -> str:
     """
     Smart contextual notification with English & Hindi bilingual AI bullet points and clear official links.
+    Dynamic year-aware.
     """
     category = detect_notification_category(title, update_type)
     is_central = ("central" in state.lower() or "nsp" in state.lower() or "nsp" in authority.lower())
+    cur_year = datetime.now().year
 
     if is_central:
         target_link = "https://scholarships.gov.in"
@@ -129,12 +124,12 @@ def format_nmms_notification(
 
     dates_content = ""
     if is_central:
-        display_last = last_date or "15 November 2026"
+        display_last = last_date or f"15 November {cur_year}"
         dates_content = f"""━━━━━━━━━━━━━━━━━━━━━
 📅 <b>IMPORTANT DATES / महत्वपूर्ण तिथियां:</b>
 🔴 <b>छात्र आवेदन की अंतिम तिथि :</b> <b>⚡ {html.escape(display_last)} ⚡</b>
-🏫 <b>स्कूल / L1 वेरिफिकेशन      :</b> <b>30 November 2026</b>
-🏛️ <b>जिला / L2 वेरिफिकेशन       :</b> <b>15 December 2026</b>
+🏫 <b>स्कूल / L1 वेरिफिकेशन      :</b> <b>30 November {cur_year}</b>
+🏛️ <b>जिला / L2 वेरिफिकेशन       :</b> <b>15 December {cur_year}</b>
 💰 <b>छात्रवृत्ति राशि              :</b> <b>₹12,000 प्रति वर्ष (DBT)</b>
 """
     elif category["type"] in ["APPLICATION_FORM", "DATE_EXTENSION", "EXAM_DATE"] or has_dates:

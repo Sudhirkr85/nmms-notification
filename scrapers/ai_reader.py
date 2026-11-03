@@ -4,6 +4,7 @@ import json
 import logging
 import re
 import requests
+from datetime import datetime
 from bs4 import BeautifulSoup
 from pypdf import PdfReader
 from groq import Groq
@@ -15,6 +16,7 @@ HEADERS = {
 }
 
 def extract_date_from_headline(title: str) -> str:
+    cur_year = str(datetime.now().year)
     month_names = r'(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)'
 
     # Month Day (e.g., November 15)
@@ -22,7 +24,7 @@ def extract_date_from_headline(title: str) -> str:
     if m1:
         month = m1.group(1).capitalize()
         day = m1.group(2)
-        year = m1.group(3) or '2026'
+        year = m1.group(3) or cur_year
         return f"{day} {month} {year}"
 
     # Day Month (e.g., 15th November)
@@ -30,7 +32,7 @@ def extract_date_from_headline(title: str) -> str:
     if m2:
         day = m2.group(1)
         month = m2.group(2).capitalize()
-        year = m2.group(3) or '2026'
+        year = m2.group(3) or cur_year
         return f"{day} {month} {year}"
 
     m3 = re.search(r'\b(\d{1,2})[-/\.](\d{1,2})[-/\.](\d{2,4})\b', title)
@@ -87,16 +89,17 @@ def get_fallback_highlights(category: str, state: str = "") -> dict:
     """
     cat = (category or "CIRCULAR").upper()
     is_central = ("central" in state.lower() or "nsp" in state.lower())
+    cur_year = datetime.now().year
 
     if is_central:
         return {
             "en": [
-                "Union Ministry of Education extends NMMSS application deadline up to 15 November 2026 on NSP.",
+                f"Union Ministry of Education extends NMMSS application deadline up to 15 November {cur_year} on NSP.",
                 "Institute (L1) verification open till 30 November; District (L2) till 15 December.",
                 "Selected students receive ₹12,000/year scholarship directly into bank account via DBT."
             ],
             "hi": [
-                "NSP पोर्टल पर NMMS छात्रवृत्ति आवेदन की अंतिम तिथि 15 नवंबर 2026 तक बढ़ाई गई।",
+                f"NSP पोर्टल पर NMMS छात्रवृत्ति आवेदन की अंतिम तिथि 15 नवंबर {cur_year} तक बढ़ाई गई।",
                 "स्कूल/इंस्टिट्यूट (L1) वेरिफिकेशन 30 नवंबर एवं जिला (L2) वेरिफिकेशन 15 दिसंबर तक मान्य।",
                 "चयनित छात्रों को ₹12,000 प्रति वर्ष सीधे बैंक खाते में (DBT द्वारा) मिलेंगे।"
             ]
@@ -118,89 +121,90 @@ def get_fallback_highlights(category: str, state: str = "") -> dict:
     elif "ADMIT" in cat or "HALL" in cat:
         return {
             "en": [
-                "Official admit cards/hall tickets are now available for download.",
-                "Candidates must check exam center, roll number, and exam timing carefully.",
-                "Carry a printed admit card along with school ID card to the exam center."
+                "Official NMMS examination Admit Card / Hall Ticket released.",
+                "Download hall ticket and verify your roll number and exam center details.",
+                "Students must carry printed admit card and school ID to the examination hall."
             ],
             "hi": [
-                "NMMS परीक्षा हेतु प्रवेश पत्र (Admit Card) आधिकारिक वेबसाइट से डाउनलोड करें।",
-                "छात्र अपने एडमिट कार्ड पर परीक्षा केंद्र, रोल नंबर और समय की जांच अवश्य करें।",
-                "परीक्षा के दिन प्रिंटेड एडमिट कार्ड व स्कूल पहचान पत्र साथ ले जाना अनिवार्य है।"
-            ]
-        }
-    elif "APPLICATION" in cat or "APPLY" in cat:
-        return {
-            "en": [
-                "Eligible for regular Class 8 students studying in Govt & Govt-aided schools.",
-                "Annual family income of parents must not exceed ₹3,50,000/- from all sources.",
-                "Selected scholars receive ₹12,000/year scholarship directly into bank account via DBT."
-            ],
-            "hi": [
-                "सरकारी एवं अनुदानित विद्यालयों में कक्षा 8वीं में अध्ययनरत नियमित छात्र पात्र हैं।",
-                "अभिभावक की वार्षिक आय सभी स्रोतों से ₹3,50,000 से अधिक नहीं होनी चाहिए।",
-                "चयनित छात्रों को प्रति वर्ष ₹12,000 छात्रवृत्ति सीधे बैंक खाते में (DBT द्वारा) मिलती है।"
+                "NMMS छात्रवृत्ति परीक्षा का आधिकारिक एडमिट कार्ड / प्रवेश पत्र जारी कर दिया गया है।",
+                "छात्र तुरंत अपना प्रवेश पत्र डाउनलोड कर रोल नंबर व परीक्षा केंद्र की जांच करें।",
+                "परीक्षा केंद्र पर प्रवेश पत्र की प्रिंट कॉपी एवं विद्यालय पहचान पत्र साथ ले जाना अनिवार्य है।"
             ]
         }
     elif "ANSWER" in cat:
         return {
             "en": [
-                "Provisional answer key released for MAT (Mental Ability) and SAT (Scholastic Ability).",
-                "Students can cross-check their responses and calculate estimated scores.",
-                "Submit objections/challenges online before the specified last date."
+                "Official NMMS Provisional Answer Key published for MAT and SAT papers.",
+                "Match your question paper responses to calculate provisional examination marks.",
+                "File objections online before the specified deadline if you find any discrepancies."
             ],
             "hi": [
-                "मैट (MAT) एवं सैट (SAT) की आधिकारिक प्रोविजनल उत्तर कुंजी (Answer Key) जारी।",
-                "छात्र अपने उत्तरों का मिलान कर संभावित प्राप्तांक का आकलन कर सकते हैं।",
-                "किसी उत्तर पर आपत्ति होने पर निर्धारित अंतिम तिथि से पूर्व ऑनलाइन आपत्ति दर्ज करें।"
+                "NMMS परीक्षा (MAT एवं SAT) की आधिकारिक प्रोविजनल उत्तर कुंजी जारी कर दी गई है।",
+                "विद्यार्थी अपने प्रश्न पत्र के उत्तरों का मिलान कर संभावित प्राप्तांक जान सकते हैं।",
+                "किसी प्रश्न या उत्तर पर आपत्ति होने पर निर्धारित समय सीमा के भीतर आपत्ति दर्ज करें।"
             ]
         }
-    elif "EXTEN" in cat:
+    elif "DATE_EXTENSION" in cat:
         return {
             "en": [
-                "NMMS scholarship online application deadline has been officially extended.",
-                "Great opportunity for eligible students who could not complete registration earlier.",
-                "Complete online registration and submit documents before the extended date."
+                "Official deadline extended for NMMS online application submission.",
+                "Eligible Class 8 students who missed previous dates can now complete their application.",
+                "Ensure school/headmaster verification is completed before the extended closing date."
             ],
             "hi": [
-                "NMMS छात्रवृत्ति ऑनलाइन आवेदन की अंतिम तिथि आगे बढ़ा दी गई है।",
-                "जो छात्र पहले आवेदन नहीं कर पाए थे, उनके लिए फॉर्म भरने का यह सुनहरा मौका है।",
-                "अंतिम तिथि से पहले ऑनलाइन आवेदन पूरा कर आवश्यक दस्तावेज जमा करें।"
+                "NMMS छात्रवृत्ति ऑनलाइन आवेदन करने की अंतिम तिथि आगे बढ़ा दी गई है।",
+                "पात्र कक्षा 8वीं के छात्र जो पूर्व में आवेदन से छूट गए थे, वे अब फॉर्म भर सकते हैं।",
+                "अंतिम तिथि से पहले विद्यालय के प्रधानाध्यापक द्वारा फॉर्म का सत्यापन अवश्य पूर्ण करवाएं।"
             ]
         }
-    elif "QUESTION" in cat:
+    elif "APPLICATION" in cat or "FORM" in cat:
         return {
             "en": [
-                "Official NMMS sample question papers and previous year papers available.",
-                "Exam format: MAT (90 Marks) and SAT (90 Marks) - Total 180 Marks.",
-                "Practice these model papers to understand question pattern and time management."
+                "NMMS Online Application Form live for eligible Class 8 government school students.",
+                "Parental annual income must be below ₹3,50,000 from all sources.",
+                "Successful scholars will receive ₹1,000/month (₹12,000/year) from Class 9 to 12."
             ],
             "hi": [
-                "NMMS परीक्षा हेतु आधिकारिक मॉडल प्रश्न पत्र व अभ्यास सेट उपलब्ध कराए गए हैं।",
-                "परीक्षा में दो भाग होंगे: मानसिक योग्यता (MAT - 90 अंक) व शैक्षिक योग्यता (SAT - 90 अंक)।",
-                "छात्र परीक्षा पैटर्न और समय प्रबंधन समझने हेतु इन प्रश्न पत्रों का अभ्यास अवश्य करें।"
+                "सरकारी विद्यालयों के कक्षा 8वीं के छात्रों हेतु NMMS छात्रवृत्ति ऑनलाइन आवेदन शुरू।",
+                "अभिभावक की कुल वार्षिक आय ₹3,50,000 से कम होना आवश्यक है।",
+                "चयनित मेधावी छात्रों को 9वीं से 12वीं तक ₹1,000 प्रतिमाह (₹12,000/वर्ष) छात्रवृत्ति मिलेगी।"
+            ]
+        }
+    elif "EXAM_DATE" in cat:
+        return {
+            "en": [
+                "Official NMMS State Level Examination Date and Schedule announced.",
+                "Exam comprises two objective papers: Mental Ability Test (MAT) & Scholastic Aptitude Test (SAT).",
+                "Check reporting time and designated exam center guidelines in the official notice."
+            ],
+            "hi": [
+                "NMMS राज्य स्तरीय छात्रवृत्ति परीक्षा की आधिकारिक तिथि एवं कार्यक्रम घोषित।",
+                "परीक्षा में दो पेपर होंगे: मानसिक योग्यता परीक्षण (MAT) एवं शैक्षिक योग्यता परीक्षण (SAT)।",
+                "आधिकारिक विज्ञप्ति में दिए गए रिपोर्टिंग समय व परीक्षा केंद्र के निर्देशों का पालन करें।"
             ]
         }
     else:
         return {
             "en": [
-                "Official notification issued by the Education Department / Authority.",
-                "All concerned students, teachers, and school heads should review the instructions.",
-                "Check the official portal link below for complete circular details."
+                "Official update published on the State Education Department website.",
+                "Class 8 students and schools are advised to check guidelines carefully.",
+                "Visit the official portal link below to download complete guidelines."
             ],
             "hi": [
-                "शिक्षा विभाग / संबंधित प्राधिकारी द्वारा आधिकारिक सूचना एवं दिशा-निर्देश जारी।",
-                "संबंधित सभी छात्र, शिक्षक एवं विद्यालय प्रधान निर्देशों का अध्ययन अवश्य करें।",
-                "विस्तृत जानकारी हेतु नीचे दिए गए लिंक से आधिकारिक नोटिस देखें।"
+                "शिक्षा विभाग द्वारा NMMS परीक्षा के संबंध में नया आधिकारिक आदेश जारी।",
+                "कक्षा 8वीं के छात्र एवं विद्यालय दिशा-निर्देशों का ध्यानपूर्वक अवलोकन करें।",
+                "विस्तृत जानकारी हेतु नीचे दिए गए लिंक से आधिकारिक नोटिस डाउनलोड करें।"
             ]
         }
 
 def analyze_notice_with_groq(state: str, title: str, notice_url: str = "") -> dict:
     """
-    Uses Groq AI to deeply understand the notice and extract exact dates & category.
+    Uses Groq LLM (llama-3.3-70b-versatile with fallbacks) to read and extract dates and bilingual bullet points.
     Guarantees robust bilingual highlights even on partial or missing responses.
     """
     api_key = os.getenv("GROQ_API_KEY")
     headline_date = extract_date_from_headline(title)
+    cur_year = datetime.now().year
 
     if not api_key:
         fallback = get_fallback_highlights("DATE_EXTENSION" if any(w in title.lower() for w in ["extend", "deadline"]) else "CIRCULAR", state)
@@ -208,7 +212,7 @@ def analyze_notice_with_groq(state: str, title: str, notice_url: str = "") -> di
             "category": "DATE_EXTENSION" if any(w in title.lower() for w in ["extend", "deadline"]) else "CIRCULAR",
             "clean_title": title,
             "start_date": "Active Now",
-            "last_date": headline_date or "15 November 2026",
+            "last_date": headline_date or f"15 November {cur_year}",
             "exam_date": None,
             "highlights_en": fallback["en"],
             "highlights_hi": fallback["hi"]
@@ -223,7 +227,7 @@ Headline/Notice Title: {title}
 Notice Document/Webpage Content:
 {extracted_text if extracted_text else 'No additional document text available. Analyze from headline.'}"""
 
-    system_prompt = """You are an expert Indian education scholarship analyst for the National Means-cum-Merit Scholarship (NMMS).
+    system_prompt = f"""You are an expert Indian education scholarship analyst for the National Means-cum-Merit Scholarship (NMMS). Current year is {cur_year}.
 Analyze the given notice text carefully.
 Identify the exact category:
 1. RESULT: Selected candidates list, district cutoff, next steps for scholarship DBT via NSP.
@@ -238,12 +242,12 @@ Extract exact dates if mentioned anywhere in title or content: start_date, last_
 Provide 2-3 specific, actionable, fact-filled bullet points in both English and Hindi (strictly in Devanagari script / देवनागरी लिपि, even if the source notice is in another regional language) tailored directly to this notice type.
 
 Return ONLY valid JSON with this exact structure:
-{
+{{
   "category": "APPLICATION_FORM" | "ADMIT_CARD" | "RESULT" | "ANSWER_KEY" | "QUESTION_PAPER" | "DATE_EXTENSION" | "CIRCULAR",
   "clean_title": "Clear concise 1-line title in English",
-  "start_date": "Exact start date e.g. 15 Oct 2026 or null",
-  "last_date": "Exact last date e.g. 15 Nov 2026 or null",
-  "exam_date": "Exact exam date e.g. 17 Jan 2027 or null",
+  "start_date": "Exact start date or null",
+  "last_date": "Exact last date or null",
+  "exam_date": "Exact exam date or null",
   "highlights_en": [
     "Point 1 with exact facts/instructions in English",
     "Point 2 with exact facts/instructions in English",
@@ -254,7 +258,7 @@ Return ONLY valid JSON with this exact structure:
     "बिंदु 2 शुद्ध हिंदी (देवनागरी लिपि) में सटीक तथ्य एवं निर्देश",
     "बिंदु 3 शुद्ध हिंदी (देवनागरी लिपि) में सटीक तथ्य एवं निर्देश"
   ]
-}
+}}
 Important: Output ONLY the JSON object, no markdown code fence, no text outside JSON."""
 
     client = Groq(api_key=api_key)
@@ -269,29 +273,26 @@ Important: Output ONLY the JSON object, no markdown code fence, no text outside 
                 ],
                 model=model_name,
                 temperature=0.1,
-                response_format={"type": "json_object"}
+                max_tokens=800
             )
-            response_text = chat_completion.choices[0].message.content
-            data = json.loads(response_text)
+            raw_response = chat_completion.choices[0].message.content.strip()
 
-            # Normalize string "null" or "None" in date fields to None
-            for df in ["start_date", "last_date", "exam_date"]:
-                val = data.get(df)
-                if isinstance(val, str) and val.strip().lower() in ["null", "none", "n/a", ""]:
-                    data[df] = None
+            # Clean JSON if wrapped in markdown
+            raw_response = re.sub(r"^```(?:json)?\s*", "", raw_response)
+            raw_response = re.sub(r"\s*```$", "", raw_response).strip()
 
-            # Fallback to headline date if last_date is empty
+            data = json.loads(raw_response)
+
+            # Sanity fallbacks for missing fields
+            if not data.get("highlights_en") or not data.get("highlights_hi"):
+                fallback = get_fallback_highlights(data.get("category", "CIRCULAR"), state)
+                data["highlights_en"] = data.get("highlights_en") or fallback["en"]
+                data["highlights_hi"] = data.get("highlights_hi") or fallback["hi"]
+
             if not data.get("last_date") and headline_date:
                 data["last_date"] = headline_date
 
-            # Verify and supplement highlights if empty
-            category = data.get("category", "CIRCULAR")
-            fallback = get_fallback_highlights(category, state)
-            if not data.get("highlights_en") or not isinstance(data.get("highlights_en"), list) or len(data.get("highlights_en")) == 0:
-                data["highlights_en"] = fallback["en"]
-            if not data.get("highlights_hi") or not isinstance(data.get("highlights_hi"), list) or len(data.get("highlights_hi")) == 0:
-                data["highlights_hi"] = fallback["hi"]
-
+            logger.info(f"Groq ({model_name}) analysis successful for {state}: Category={data.get('category')}")
             return data
         except Exception as e:
             logger.warning(f"Groq model {model_name} error: {e}")
@@ -303,7 +304,7 @@ Important: Output ONLY the JSON object, no markdown code fence, no text outside 
         "category": "DATE_EXTENSION" if any(w in title.lower() for w in ["extend", "deadline"]) else "CIRCULAR",
         "clean_title": title,
         "start_date": "Active Now",
-        "last_date": headline_date or "15 November 2026",
+        "last_date": headline_date or f"15 November {cur_year}",
         "exam_date": None,
         "highlights_en": fallback["en"],
         "highlights_hi": fallback["hi"]

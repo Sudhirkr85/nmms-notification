@@ -1,6 +1,7 @@
 import os
 import time
 import logging
+from datetime import datetime
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -45,11 +46,12 @@ def process_and_post_notice(notice: dict) -> int:
     final_exam = ai_data.get("exam_date") or notice.get("exam_date", "")
     final_update_type = ai_data.get("category") or notice["update_type"]
 
+    cur_year = datetime.now().year
     # Guarantee last_date from headline if AI missed it
     if not final_last:
         final_last = extract_date_from_headline(final_title) or extract_date_from_headline(notice["title"])
     if not final_last and ("central" in state.lower() or "nsp" in state.lower()):
-        final_last = "15 November 2026"
+        final_last = f"15 November {cur_year}"
 
     # Category detection for smart button
     category_info = detect_notification_category(final_title, final_update_type)
@@ -69,7 +71,7 @@ def process_and_post_notice(notice: dict) -> int:
         logger.info(f"   -> [REJECTED BY QUALITY GATE] Junk / administrative notice: '{final_title}' ({state})")
         return 0
 
-    # Gate 2: Check outdated years (2020-2025)
+    # Gate 2: Check outdated years dynamically
     if is_outdated_archive(final_title, pdf_url or apply_url or ""):
         logger.info(f"   -> [REJECTED BY QUALITY GATE] Outdated archive notice: '{final_title}' ({state})")
         return 0

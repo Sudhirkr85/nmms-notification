@@ -4,6 +4,7 @@ from bs4 import BeautifulSoup
 import re
 import urllib3
 import hashlib
+from datetime import datetime
 from typing import List, Dict
 from data.storage import is_already_posted
 
@@ -15,7 +16,6 @@ HEADERS = {
 
 def generate_notification_id(state: str, title: str, target_date: str = "") -> str:
     t = title.strip().lower()
-    # If this is an extension / deadline notice with a specific date
     if any(k in t for k in ["extend", "extended", "extension", "deadline", "last date"]) and target_date:
         cleaned = f"{state.strip().lower()}_extension_{target_date.strip().lower()}"
     else:
@@ -26,6 +26,7 @@ def generate_notification_id(state: str, title: str, target_date: str = "") -> s
     return hashlib.md5(cleaned.encode("utf-8")).hexdigest()
 
 def extract_date_from_headline(title: str) -> str:
+    cur_year = str(datetime.now().year)
     month_names = r'(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)'
 
     # Month Day (e.g., November 15)
@@ -33,7 +34,7 @@ def extract_date_from_headline(title: str) -> str:
     if m1:
         month = m1.group(1).capitalize()
         day = m1.group(2)
-        year = m1.group(3) or '2026'
+        year = m1.group(3) or cur_year
         return f"{day} {month} {year}"
 
     # Day Month (e.g., 15th November)
@@ -41,7 +42,7 @@ def extract_date_from_headline(title: str) -> str:
     if m2:
         day = m2.group(1)
         month = m2.group(2).capitalize()
-        year = m2.group(3) or '2026'
+        year = m2.group(3) or cur_year
         return f"{day} {month} {year}"
 
     m3 = re.search(r'\b(\d{1,2})[-/\.](\d{1,2})[-/\.](\d{2,4})\b', title)
@@ -53,16 +54,17 @@ def extract_date_from_headline(title: str) -> str:
 def scrape_central_nsp() -> List[Dict]:
     """
     Scrapes official National Scholarship Portal (NSP) announcements and
-    Ministry of Education / PIB press releases for NMMSS (National Means-cum-Merit Scholarship Scheme).
-    Always guarantees official scholarships.gov.in portal link and strict single-item deduplication.
+    Ministry of Education / PIB press releases for NMMSS.
+    Strict single-item deduplication and dynamic year handling.
     """
     notifications = []
     seen = set()
+    cur_year = datetime.now().year
 
-    # 1. Official Press Releases & Announcements via verified RSS (PIB / Central MoE)
+    # 1. Official Press Releases via verified government PIB search
     rss_queries = [
-        "https://news.google.com/rss/search?q=%22NMMSS%22+OR+%22National+Means-cum-Merit%22&hl=en-IN&gl=IN&ceid=IN:en",
-        "https://news.google.com/rss/search?q=%22NMMSS%22+site:pib.gov.in&hl=en-IN&gl=IN&ceid=IN:en"
+        "https://news.google.com/rss/search?q=%22NMMSS%22+site:pib.gov.in&hl=en-IN&gl=IN&ceid=IN:en",
+        "https://news.google.com/rss/search?q=%22NMMSS%22+OR+%22National+Means-cum-Merit%22&hl=en-IN&gl=IN&ceid=IN:en"
     ]
 
     for rss_url in rss_queries:
@@ -75,14 +77,14 @@ def scrape_central_nsp() -> List[Dict]:
 
                     t_lower = raw_title.lower()
                     if any(k in t_lower for k in ["nmms", "nmmss", "national means"]):
-                        # Clean title - remove source suffix like "- News On AIR", "- Careers360"
                         clean_title = re.sub(r"\s*-\s*[^-]+$", "", raw_title).strip()
 
                         if len(clean_title) < 15:
                             continue
 
                         extracted_last_date = extract_date_from_headline(clean_title)
-                        notif_id = generate_notification_id("Central (NSP)", clean_title, extracted_last_date or "15 November 2026")
+                        fallback_date = f"15 November {cur_year}"
+                        notif_id = generate_notification_id("Central (NSP)", clean_title, extracted_last_date or fallback_date)
                         if notif_id in seen:
                             continue
                         seen.add(notif_id)
@@ -94,18 +96,16 @@ def scrape_central_nsp() -> List[Dict]:
                             "title": clean_title,
                             "update_type": "NSP Official Update",
                             "apply_link": "https://scholarships.gov.in",
-                            "pdf_link": "",  # Always empty so official scholarships.gov.in is used
+                            "pdf_link": "",
                             "apply_start": "Active Now",
-                            "last_date": extracted_last_date or "15 November 2026",
+                            "last_date": extracted_last_date or fallback_date,
                             "exam_date": ""
                         }
 
-                        # Check if already posted before adding to notifications
                         if is_already_posted(notif_id, item_data):
                             continue
 
                         notifications.append(item_data)
-                        # Pick only 1 top new notification per event to prevent duplicate posts
                         break
                 if notifications:
                     break
@@ -132,7 +132,8 @@ def scrape_central_nsp() -> List[Dict]:
                                 continue
 
                             extracted_date = extract_date_from_headline(clean_text)
-                            notif_id = generate_notification_id("Central (NSP)", clean_text, extracted_date or "15 November 2026")
+                            fallback_date = f"15 November {cur_year}"
+                            notif_id = generate_notification_id("Central (NSP)", clean_text, extracted_date or fallback_date)
                             if notif_id in seen:
                                 continue
                             seen.add(notif_id)
@@ -146,7 +147,7 @@ def scrape_central_nsp() -> List[Dict]:
                                 "apply_link": "https://scholarships.gov.in",
                                 "pdf_link": "",
                                 "apply_start": "Active Now",
-                                "last_date": extracted_date or "15 November 2026",
+                                "last_date": extracted_date or fallback_date,
                                 "exam_date": ""
                             }
 

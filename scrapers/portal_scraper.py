@@ -3,6 +3,7 @@ from bs4 import BeautifulSoup
 import re
 import urllib3
 import hashlib
+from datetime import datetime
 from typing import List, Dict
 from urllib.parse import urljoin, urlparse, urlsplit, urlunsplit, quote
 from data.storage import is_already_posted
@@ -44,6 +45,23 @@ ACTIONABLE_KEYWORDS = [
     "scholarship", "nmmss", "nmms"
 ]
 
+def get_academic_cycle():
+    """
+    Computes current base year and active academic sessions dynamically.
+    Works automatically for 2026, 2027, 2028, and every year in future!
+    """
+    now = datetime.now()
+    cur_year = now.year
+    # In Jan-May, the previous calendar year's exam session is still in the result/merit phase
+    base_year = (cur_year - 1) if now.month <= 5 else cur_year
+
+    active_sessions = [
+        f"{base_year}-{str(base_year + 1)[-2:]}",       # e.g. 2026-27
+        f"{base_year + 1}-{str(base_year + 2)[-2:]}",   # e.g. 2027-28 (used by UP)
+        f"{base_year - 1}-{str(base_year)[-2:]}"        # e.g. 2025-26 (for recent results declared)
+    ]
+    return base_year, active_sessions
+
 def is_junk_notice(title: str, url: str = "") -> bool:
     """
     Returns True if notice is internal administrative noise, old question paper, or center staff material.
@@ -53,30 +71,28 @@ def is_junk_notice(title: str, url: str = "") -> bool:
 
 def is_outdated_archive(title: str, url: str = "") -> bool:
     """
-    Returns True if the notice/document belongs to old expired cycles (2020-2025 or early 2026 archives).
-    Current valid session is 2026-27 (or 2027-28 for UP).
+    Returns True if the notice/document belongs to old expired cycles.
+    Dynamically computes cutoffs so it works in 2026, 2027, 2028, etc. without code changes.
     """
+    base_year, active_sessions = get_academic_cycle()
     combined = f"{title} {url}".lower()
 
-    # Reject URLs explicitly filed in 2020-2025 folders or early 2026 months
-    old_folder_patterns = [
-        r"/(?:202[0-5])/",
-        r"/(?:instructions|circulars|notices|downloads)/(?:202[0-5]|2026/(?:january|february|march|april|may|june|july))/",
-        r"202[0-4]-\d{2,4}",  # e.g. 2024-25, 2023-24
-    ]
-    for p in old_folder_patterns:
-        if re.search(p, combined):
+    # Reject URLs explicitly filed in expired past years (e.g. /2024/, /2025/ when in 2026; /2026/ when in 2027)
+    for past_y in range(2018, base_year):
+        if f"/{past_y}/" in combined or f"/{past_y}-" in combined or f"_{past_y}_" in combined:
+            return True
+        # Reject past academic sessions (e.g. 2024-25 when base is 2026)
+        past_session = f"{past_y}-{str(past_y + 1)[-2:]}"
+        if past_session in combined and not any(s in combined for s in active_sessions[:2]):
             return True
 
-    # If document URL has 2025 in path and title does NOT explicitly mention current session
-    if "/2025/" in url.lower() and not ("2026-27" in combined or "2027-28" in combined):
-        return True
-
-    # If title mentions old years 2020-2024 without mentioning 2026-27/2027-28
-    has_old = bool(re.search(r"\b202[0-4]\b", combined))
-    has_current = bool(re.search(r"\b202[6-8]\b", combined))
-    if has_old and not has_current:
-        return True
+    # Reject early months of base year during fresh application season (Aug - Dec)
+    now = datetime.now()
+    if now.month >= 8:
+        early_months = ["january", "february", "march", "april", "may", "june", "july"]
+        for m in early_months:
+            if f"/{base_year}/{m}/" in combined:
+                return True
 
     return False
 
@@ -91,18 +107,12 @@ def is_bare_scheme_name(title: str) -> bool:
     return bool(re.fullmatch(pattern, clean))
 
 def generate_notification_id(state: str, title: str, doc_url: str = "") -> str:
-    """
-    Generates a deterministic ID.
-    If the notification points to a document/PDF, the clean document URL is its canonical identity.
-    Otherwise, normalized semantic title is used.
-    """
     doc_extensions = (".pdf", ".jpg", ".jpeg", ".png", ".docx", ".doc")
     clean_doc = (doc_url or "").strip().lower()
     clean_doc = re.sub(r"[?#].*$", "", clean_doc).rstrip("/")
     if clean_doc and any(clean_doc.endswith(ext) for ext in doc_extensions):
         cleaned = f"{state.strip().lower()}_{clean_doc}"
     else:
-        # Normalize title: strip time prefixes (e.g. 126 days ago, 2 days ago), punctuation, whitespace
         t = re.sub(r"^\s*\d+\s*(?:days?|weeks?|months?|hours?|mins?|minutes?)\s*ago\s*", "", title, flags=re.IGNORECASE)
         t = re.sub(r"^\s*(?:new|notice|circular|📢|🔔)[\s\W]*", "", t, flags=re.IGNORECASE)
         t = re.sub(r"\s+", " ", t).strip().lower()
@@ -162,7 +172,7 @@ def scrape_state_website(state: str, config: dict) -> List[Dict]:
     Scrapes an official state education portal looking for genuine student NMMS notifications.
     Strictly filters out:
     1. Internal administrative noise / DEO letters / Question papers / Attendance sheets
-    2. Outdated archive notices from past years (2020-2025)
+    2. Outdated archive notices from past years
     3. Bare menu navigation buttons (e.g. "NMMS 2027-28" without any document)
     """
     notifications = []
@@ -215,7 +225,7 @@ def scrape_state_website(state: str, config: dict) -> List[Dict]:
             if is_junk_notice(text, resolved_url):
                 continue
 
-            # GATE 2: Reject outdated archives from 2020-2025 or early 2026 months
+            # GATE 2: Reject outdated archives from past cycles
             if is_outdated_archive(text, resolved_url):
                 continue
 
