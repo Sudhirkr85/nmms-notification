@@ -8,7 +8,7 @@ load_dotenv()
 
 from config.states import STATE_CONFIG
 from data.storage import is_already_posted, record_posted
-from scrapers.portal_scraper import scrape_state_website
+from scrapers.portal_scraper import scrape_state_website, is_junk_notice, is_outdated_archive, is_bare_scheme_name
 from scrapers.central_scraper import scrape_central_nsp, extract_date_from_headline
 from scrapers.ai_reader import analyze_notice_with_groq
 from bot.formatter import format_nmms_notification, detect_notification_category
@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 def process_and_post_notice(notice: dict) -> int:
     """
-    Takes a notice dictionary, analyzes with AI, formats message, and sends to Telegram.
+    Takes a notice dictionary, analyzes with AI, verifies value for students, formats message, and sends to Telegram.
     Returns message_id on success, 0 on skip/failure.
     """
     notif_id = notice["id"]
@@ -32,7 +32,7 @@ def process_and_post_notice(notice: dict) -> int:
         return 0
 
     state = notice["state"]
-    logger.info(f"   -> NEW NOTIFICATION FOUND: '{notice['title']}' ({state})")
+    logger.info(f"   -> NEW CANDIDATE NOTICE FOUND: '{notice['title']}' ({state})")
 
     # Deep AI Analysis with Groq (handles PDF & HTML reading)
     target_url = notice.get("pdf_link") or notice.get("apply_link") or ""
@@ -52,6 +52,7 @@ def process_and_post_notice(notice: dict) -> int:
 
     # Category detection for smart button
     category_info = detect_notification_category(final_title, final_update_type)
+    cat_type = category_info.get("type", "")
 
     # For Central / NSP, always guarantee official portal apply link
     if "central" in state.lower() or "nsp" in state.lower():
@@ -60,6 +61,27 @@ def process_and_post_notice(notice: dict) -> int:
     else:
         apply_url = notice.get("apply_link")
         pdf_url = notice.get("pdf_link")
+
+    # STRICT STUDENT QUALITY GATES (Protect paying subscribers from junk / expired notices):
+    # Gate 1: Check junk / administrative / question paper / attendance keywords
+    if is_junk_notice(final_title, pdf_url or apply_url or "") or cat_type == "QUESTION_PAPER":
+        logger.info(f"   -> [REJECTED BY QUALITY GATE] Junk / administrative notice: '{final_title}' ({state})")
+        return 0
+
+    # Gate 2: Check outdated years (2020-2025)
+    if is_outdated_archive(final_title, pdf_url or apply_url or ""):
+        logger.info(f"   -> [REJECTED BY QUALITY GATE] Outdated archive notice: '{final_title}' ({state})")
+        return 0
+
+    # Gate 3: Check bare navigation link without PDF / real content
+    if not pdf_url and is_bare_scheme_name(final_title):
+        logger.info(f"   -> [REJECTED BY QUALITY GATE] Bare menu button: '{final_title}' ({state})")
+        return 0
+
+    # Gate 4: If category is general CIRCULAR without PDF, without last_date and without exam_date, reject it
+    if cat_type == "CIRCULAR" and not pdf_url and not final_last and not final_exam:
+        logger.info(f"   -> [REJECTED BY QUALITY GATE] Empty circular with no dates or document: '{final_title}' ({state})")
+        return 0
 
     # Double-check duplicate after AI refinement (e.g. if title or date was normalized)
     enriched_notice = {
@@ -108,6 +130,7 @@ def process_and_post_notice(notice: dict) -> int:
             last_date=final_last or notice.get("last_date", ""),
             message_id=msg_id
         )
+        logger.info(f"   -> [POSTED SUCCESS] Message ID {msg_id} sent for {state}: '{final_title}'")
         return msg_id
     return 0
 
