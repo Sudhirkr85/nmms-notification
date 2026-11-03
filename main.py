@@ -7,13 +7,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from config.states import STATE_CONFIG
-from data.storage import is_already_posted, record_posted
+from data.storage import is_already_posted, record_posted, DATA_FILE
 from scrapers.portal_scraper import scrape_state_website, is_junk_notice, is_outdated_archive, is_bare_scheme_name
 from scrapers.central_scraper import scrape_central_nsp, extract_date_from_headline
 from scrapers.ai_reader import analyze_notice_with_groq
 from bot.formatter import format_nmms_notification, detect_notification_category
 from bot.telegram_poster import send_telegram_message
 from bot.reminder import check_and_send_reminders
+from bot.cleaner import purge_bad_messages
 
 logging.basicConfig(
     level=logging.INFO,
@@ -135,7 +136,13 @@ def process_and_post_notice(notice: dict) -> int:
     return 0
 
 def run_nmms_pipeline():
-    logger.info("Checking urgent last-date reminders first...")
+    # 0. Automatically purge any previously posted bad / junk messages from Telegram channel
+    try:
+        purge_bad_messages(DATA_FILE)
+    except Exception as e:
+        logger.warning(f"Purge error: {e}")
+
+    logger.info("Checking urgent last-date reminders...")
     try:
         check_and_send_reminders()
     except Exception as e:
