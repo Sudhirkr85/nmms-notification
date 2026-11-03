@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from config.states import STATE_CONFIG
-from data.storage import is_already_posted, record_posted, DATA_FILE
+from data.storage import is_already_posted, record_posted, get_recent_notices_for_state, DATA_FILE
 from scrapers.portal_scraper import scrape_state_website, is_junk_notice, is_outdated_archive, is_bare_scheme_name
 from scrapers.central_scraper import scrape_central_nsp, extract_date_from_headline
 from scrapers.ai_reader import analyze_notice_with_groq
@@ -25,20 +25,49 @@ logger = logging.getLogger(__name__)
 
 def process_and_post_notice(notice: dict) -> int:
     """
-    Takes a notice dictionary, analyzes with AI, verifies value for students, formats message, and sends to Telegram.
+    Takes a candidate notice dictionary:
+    1. Runs fast rule-based duplicate check
+    2. Runs Groq LLaMA-3.3-70B AI Gatekeeper (checks student relevance & semantic deduplication against recent posts)
+    3. If approved, formats bilingual message and posts to Telegram
     Returns message_id on success, 0 on skip/failure.
     """
     notif_id = notice["id"]
     if is_already_posted(notif_id, notice):
-        logger.info(f"   -> SKIPPING DUPLICATE: '{notice.get('title')}' ({notice.get('state')})")
+        logger.info(f"   -> SKIPPING DUPLICATE (Hash/ID match): '{notice.get('title')}' ({notice.get('state')})")
         return 0
 
     state = notice["state"]
-    logger.info(f"   -> NEW CANDIDATE NOTICE FOUND: '{notice['title']}' ({state})")
+    logger.info(f"   -> CANDIDATE NOTICE FOUND: '{notice['title']}' ({state})")
 
-    # Deep AI Analysis with Groq (handles PDF & HTML reading)
+    # Fast preliminary gate
     target_url = notice.get("pdf_link") or notice.get("apply_link") or ""
-    ai_data = analyze_notice_with_groq(state, notice["title"], target_url)
+    if is_junk_notice(notice["title"], target_url):
+        logger.info(f"   -> [RULE REJECT] Junk / administrative keyword in candidate: '{notice['title']}' ({state})")
+        return 0
+
+    if is_outdated_archive(notice["title"], target_url):
+        logger.info(f"   -> [RULE REJECT] Outdated archive candidate: '{notice['title']}' ({state})")
+        return 0
+
+    if not notice.get("pdf_link") and is_bare_scheme_name(notice["title"]):
+        logger.info(f"   -> [RULE REJECT] Bare navigation button: '{notice['title']}' ({state})")
+        return 0
+
+    # Retrieve recent announcements for this state to feed into AI Semantic Deduplicator
+    recent_posts = get_recent_notices_for_state(state, limit=5)
+
+    # Groq LLaMA-3.3-70B AI Quality Gatekeeper & Semantic Deduplicator
+    ai_data = analyze_notice_with_groq(state, notice["title"], target_url, recent_posts=recent_posts)
+
+    # GATE 1: AI Student-Actionable Check
+    if not ai_data.get("is_student_actionable", True):
+        logger.info(f"   -> [AI GATE REJECT] Not student-actionable: {ai_data.get('rejection_reason')} ('{notice['title']}')")
+        return 0
+
+    # GATE 2: AI Semantic Deduplication Check (Same event reported under different headlines)
+    if ai_data.get("is_semantic_duplicate", False):
+        logger.info(f"   -> [AI DUPLICATE REJECT] Semantic duplicate: {ai_data.get('rejection_reason')} ('{notice['title']}')")
+        return 0
 
     final_title = ai_data.get("clean_title") or notice["title"]
     final_start = ai_data.get("start_date") or notice.get("apply_start", "")
@@ -47,13 +76,12 @@ def process_and_post_notice(notice: dict) -> int:
     final_update_type = ai_data.get("category") or notice["update_type"]
 
     cur_year = datetime.now().year
-    # Guarantee last_date from headline if AI missed it
     if not final_last:
         final_last = extract_date_from_headline(final_title) or extract_date_from_headline(notice["title"])
     if not final_last and ("central" in state.lower() or "nsp" in state.lower()):
         final_last = f"15 November {cur_year}"
 
-    # Category detection for smart button
+    # Category detection for action button
     category_info = detect_notification_category(final_title, final_update_type)
     cat_type = category_info.get("type", "")
 
@@ -65,28 +93,12 @@ def process_and_post_notice(notice: dict) -> int:
         apply_url = notice.get("apply_link")
         pdf_url = notice.get("pdf_link")
 
-    # STRICT STUDENT QUALITY GATES (Protect paying subscribers from junk / expired notices):
-    # Gate 1: Check junk / administrative / question paper / attendance keywords
-    if is_junk_notice(final_title, pdf_url or apply_url or "") or cat_type == "QUESTION_PAPER":
-        logger.info(f"   -> [REJECTED BY QUALITY GATE] Junk / administrative notice: '{final_title}' ({state})")
-        return 0
-
-    # Gate 2: Check outdated years dynamically
-    if is_outdated_archive(final_title, pdf_url or apply_url or ""):
-        logger.info(f"   -> [REJECTED BY QUALITY GATE] Outdated archive notice: '{final_title}' ({state})")
-        return 0
-
-    # Gate 3: Check bare navigation link without PDF / real content
-    if not pdf_url and is_bare_scheme_name(final_title):
-        logger.info(f"   -> [REJECTED BY QUALITY GATE] Bare menu button: '{final_title}' ({state})")
-        return 0
-
-    # Gate 4: If category is general CIRCULAR without PDF, without last_date and without exam_date, reject it
+    # Final safety: Vague circulars without PDF or dates are dropped
     if cat_type == "CIRCULAR" and not pdf_url and not final_last and not final_exam:
-        logger.info(f"   -> [REJECTED BY QUALITY GATE] Empty circular with no dates or document: '{final_title}' ({state})")
+        logger.info(f"   -> [GATE REJECT] Empty circular with no dates or document: '{final_title}' ({state})")
         return 0
 
-    # Double-check duplicate after AI refinement (e.g. if title or date was normalized)
+    # Double-check storage duplicate after AI title/date refinement
     enriched_notice = {
         **notice,
         "title": final_title,
@@ -95,10 +107,10 @@ def process_and_post_notice(notice: dict) -> int:
         "apply_link": apply_url or ""
     }
     if is_already_posted(notif_id, enriched_notice):
-        logger.info(f"   -> SKIPPING DUPLICATE (Post-AI verified): '{final_title}' ({state})")
+        logger.info(f"   -> SKIPPING DUPLICATE (Storage verified): '{final_title}' ({state})")
         return 0
 
-    # Format clean short Telegram message with Bilingual AI highlights
+    # Format clean Telegram message with Bilingual AI highlights
     message_text = format_nmms_notification(
         state=notice["state"],
         authority=notice["authority"],
@@ -182,7 +194,6 @@ def run_nmms_pipeline():
                 if state_new_posts >= 2:
                     break
 
-        # Polite delay between sites
         time.sleep(2)
 
     logger.info(f"Scan completed. Total new notifications posted: {new_posts}")

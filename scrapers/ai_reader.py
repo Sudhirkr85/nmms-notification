@@ -42,10 +42,6 @@ def extract_date_from_headline(title: str) -> str:
     return ""
 
 def extract_content_from_url(url: str, max_chars: int = 4000) -> str:
-    """
-    Extracts text whether the URL points to a PDF or an HTML webpage.
-    Safely skips parsing raw binary images.
-    """
     if not url or not url.startswith("http"):
         return ""
 
@@ -57,11 +53,9 @@ def extract_content_from_url(url: str, max_chars: int = 4000) -> str:
         content_type = resp.headers.get("Content-Type", "").lower()
         url_lower = url.lower()
 
-        # Handle image files (.jpg, .jpeg, .png, etc.) - don't parse binary as HTML
         if any(url_lower.endswith(ext) for ext in [".jpg", ".jpeg", ".png", ".webp"]) or "image" in content_type:
             return ""
 
-        # Handle PDF Circulars
         if "pdf" in content_type or url_lower.endswith(".pdf"):
             pdf_file = io.BytesIO(resp.content)
             reader = PdfReader(pdf_file)
@@ -72,7 +66,6 @@ def extract_content_from_url(url: str, max_chars: int = 4000) -> str:
                     text += extracted + "\n"
             return text[:max_chars].strip()
 
-        # Handle HTML Webpages
         soup = BeautifulSoup(resp.text, "html.parser")
         for tag in soup(["script", "style", "nav", "footer", "header", "noscript"]):
             tag.decompose()
@@ -84,9 +77,6 @@ def extract_content_from_url(url: str, max_chars: int = 4000) -> str:
         return ""
 
 def get_fallback_highlights(category: str, state: str = "") -> dict:
-    """
-    High-value, factual category-tailored bullet points in English & Hindi.
-    """
     cat = (category or "CIRCULAR").upper()
     is_central = ("central" in state.lower() or "nsp" in state.lower())
     cur_year = datetime.now().year
@@ -197,18 +187,37 @@ def get_fallback_highlights(category: str, state: str = "") -> dict:
             ]
         }
 
-def analyze_notice_with_groq(state: str, title: str, notice_url: str = "") -> dict:
+def analyze_notice_with_groq(state: str, title: str, notice_url: str = "", recent_posts: list = None) -> dict:
     """
-    Uses Groq LLM (llama-3.3-70b-versatile with fallbacks) to read and extract dates and bilingual bullet points.
-    Guarantees robust bilingual highlights even on partial or missing responses.
+    Intelligent AI Quality Gatekeeper & Semantic Deduplicator using Groq LLM (LLaMA-3.3-70B).
+    
+    Performs 3 critical checks:
+    1. is_student_actionable: Rejects internal DEO letters, staff attendance sheets, old question papers, tenders.
+    2. is_semantic_duplicate: Compares summary against recently posted announcements to prevent duplicate spam.
+    3. Category and date extraction with crisp bilingual highlights.
     """
     api_key = os.getenv("GROQ_API_KEY")
     headline_date = extract_date_from_headline(title)
     cur_year = datetime.now().year
 
+    # Format recent posts context for semantic comparison
+    recent_posts_summary = "None yet."
+    if recent_posts:
+        items = []
+        for idx, p in enumerate(recent_posts, 1):
+            items.append(f"[{idx}] Title: {p.get('title')} | Last Date: {p.get('last_date', 'N/A')}")
+        recent_posts_summary = "\n".join(items)
+
+    extracted_text = ""
+    if notice_url and notice_url.startswith("http"):
+        extracted_text = extract_content_from_url(notice_url)
+
     if not api_key:
         fallback = get_fallback_highlights("DATE_EXTENSION" if any(w in title.lower() for w in ["extend", "deadline"]) else "CIRCULAR", state)
         return {
+            "is_student_actionable": True,
+            "is_semantic_duplicate": False,
+            "rejection_reason": None,
             "category": "DATE_EXTENSION" if any(w in title.lower() for w in ["extend", "deadline"]) else "CIRCULAR",
             "clean_title": title,
             "start_date": "Active Now",
@@ -218,48 +227,59 @@ def analyze_notice_with_groq(state: str, title: str, notice_url: str = "") -> di
             "highlights_hi": fallback["hi"]
         }
 
-    extracted_text = ""
-    if notice_url and notice_url.startswith("http"):
-        extracted_text = extract_content_from_url(notice_url)
+    combined_input = f"""State/Authority: {state}
+Candidate Notice Title: {title}
+Candidate Document Content:
+{extracted_text if extracted_text else 'No PDF document text. Evaluate headline.'}
 
-    combined_input = f"""State: {state}
-Headline/Notice Title: {title}
-Notice Document/Webpage Content:
-{extracted_text if extracted_text else 'No additional document text available. Analyze from headline.'}"""
+RECENT ANNOUNCEMENTS ALREADY POSTED FOR THIS STATE IN TELEGRAM:
+{recent_posts_summary}"""
 
-    system_prompt = f"""You are an expert Indian education scholarship analyst for the National Means-cum-Merit Scholarship (NMMS). Current year is {cur_year}.
-Analyze the given notice text carefully.
-Identify the exact category:
-1. RESULT: Selected candidates list, district cutoff, next steps for scholarship DBT via NSP.
-2. ADMIT_CARD: Hall ticket download, exam day reporting, guidelines.
-3. APPLICATION_FORM: Class 8 eligibility, Rs 12,000/yr scholarship benefit, school verification.
-4. ANSWER_KEY: Provisional key, objection window, marks calculation.
-5. QUESTION_PAPER: Model paper, exam pattern practice.
-6. DATE_EXTENSION: Revised deadline, reasons, final warning.
-7. CIRCULAR: General administrative guidelines.
+    system_prompt = f"""You are the Editor-in-Chief and AI Quality Gatekeeper for a premium paid NMMS Scholarship Telegram channel (for Class 8 students & parents). Current year is {cur_year}.
 
-Extract exact dates if mentioned anywhere in title or content: start_date, last_date (or extended application deadline), and exam_date. If a deadline or extension is mentioned (e.g. 'Deadline to November 15' or 'extended till 15 Nov'), extract it as last_date.
-Provide 2-3 specific, actionable, fact-filled bullet points in both English and Hindi (strictly in Devanagari script / देवनागरी लिपि, even if the source notice is in another regional language) tailored directly to this notice type.
+Your task is to protect subscribers from spam, expired archives, internal staff letters, and duplicate news.
+
+EVALUATE AND ANSWER STRICTLY:
+1. is_student_actionable (boolean):
+   - TRUE only if this notice directly impacts students: Online Application Form Live, Deadline Extended, Admit Card Out, Answer Key Released, Exam Date Announced, or Result/Merit List Declared.
+   - FALSE if it is:
+     * Internal departmental letters (e.g. Letter to DEOs, District Education Officers, Principals, Nodal officers)
+     * Examination center logistics (Attendance sheets, Attn sheets, Seat matrix, Centre list, Superintendent orders)
+     * Old practice material (Previous year question papers, sample papers, model papers)
+     * Administrative/commercial (Tenders, quotations, auction, meeting proceedings)
+     * Expired notices from previous years or past months
+     * Bare website menu buttons or login portal links (e.g. "NMMS 2027-28" without actual notice)
+
+2. is_semantic_duplicate (boolean):
+   - Compare with RECENT ANNOUNCEMENTS ALREADY POSTED.
+   - If this candidate notice reports the SAME event, same deadline extension, or same announcement as any already posted notice (even if phrased in different words by a different news outlet or portal), return TRUE.
+   - Otherwise FALSE.
+
+3. category:
+   One of: "APPLICATION_FORM", "ADMIT_CARD", "RESULT", "ANSWER_KEY", "DATE_EXTENSION", "EXAM_DATE", "CIRCULAR".
+
+4. clean_title, start_date, last_date, exam_date, and 2-3 specific bilingual highlights.
 
 Return ONLY valid JSON with this exact structure:
 {{
-  "category": "APPLICATION_FORM" | "ADMIT_CARD" | "RESULT" | "ANSWER_KEY" | "QUESTION_PAPER" | "DATE_EXTENSION" | "CIRCULAR",
-  "clean_title": "Clear concise 1-line title in English",
+  "is_student_actionable": true | false,
+  "is_semantic_duplicate": true | false,
+  "rejection_reason": "Specific reason if actionable is false or duplicate is true, else null",
+  "category": "APPLICATION_FORM" | "ADMIT_CARD" | "RESULT" | "ANSWER_KEY" | "DATE_EXTENSION" | "EXAM_DATE" | "CIRCULAR",
+  "clean_title": "Clear 1-line title in English",
   "start_date": "Exact start date or null",
   "last_date": "Exact last date or null",
   "exam_date": "Exact exam date or null",
   "highlights_en": [
-    "Point 1 with exact facts/instructions in English",
-    "Point 2 with exact facts/instructions in English",
-    "Point 3 with exact facts/instructions in English"
+    "Point 1 in English",
+    "Point 2 in English"
   ],
   "highlights_hi": [
-    "बिंदु 1 शुद्ध हिंदी (देवनागरी लिपि) में सटीक तथ्य एवं निर्देश",
-    "बिंदु 2 शुद्ध हिंदी (देवनागरी लिपि) में सटीक तथ्य एवं निर्देश",
-    "बिंदु 3 शुद्ध हिंदी (देवनागरी लिपि) में सटीक तथ्य एवं निर्देश"
+    "बिंदु 1 शुद्ध हिंदी (देवनागरी लिपि)",
+    "बिंदु 2 शुद्ध हिंदी (देवनागरी लिपि)"
   ]
 }}
-Important: Output ONLY the JSON object, no markdown code fence, no text outside JSON."""
+Important: Output ONLY the JSON object, no markdown code fence."""
 
     client = Groq(api_key=api_key)
     models_to_try = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "qwen/qwen3.8-27b"]
@@ -276,14 +296,11 @@ Important: Output ONLY the JSON object, no markdown code fence, no text outside 
                 max_tokens=800
             )
             raw_response = chat_completion.choices[0].message.content.strip()
-
-            # Clean JSON if wrapped in markdown
             raw_response = re.sub(r"^```(?:json)?\s*", "", raw_response)
             raw_response = re.sub(r"\s*```$", "", raw_response).strip()
 
             data = json.loads(raw_response)
 
-            # Sanity fallbacks for missing fields
             if not data.get("highlights_en") or not data.get("highlights_hi"):
                 fallback = get_fallback_highlights(data.get("category", "CIRCULAR"), state)
                 data["highlights_en"] = data.get("highlights_en") or fallback["en"]
@@ -292,15 +309,23 @@ Important: Output ONLY the JSON object, no markdown code fence, no text outside 
             if not data.get("last_date") and headline_date:
                 data["last_date"] = headline_date
 
-            logger.info(f"Groq ({model_name}) analysis successful for {state}: Category={data.get('category')}")
+            logger.info(
+                f"Groq AI Gatekeeper ({model_name}) for {state}: "
+                f"Actionable={data.get('is_student_actionable')}, "
+                f"Duplicate={data.get('is_semantic_duplicate')}, "
+                f"Reason={data.get('rejection_reason')}"
+            )
             return data
         except Exception as e:
             logger.warning(f"Groq model {model_name} error: {e}")
             continue
 
-    logger.error("All Groq AI models failed or rate limited.")
+    logger.error("All Groq AI models failed or rate limited. Using rule-based fallback.")
     fallback = get_fallback_highlights("DATE_EXTENSION" if any(w in title.lower() for w in ["extend", "deadline"]) else "CIRCULAR", state)
     return {
+        "is_student_actionable": True,
+        "is_semantic_duplicate": False,
+        "rejection_reason": None,
         "category": "DATE_EXTENSION" if any(w in title.lower() for w in ["extend", "deadline"]) else "CIRCULAR",
         "clean_title": title,
         "start_date": "Active Now",

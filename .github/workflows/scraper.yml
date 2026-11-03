@@ -1,6 +1,9 @@
 name: NMMS Auto Scraper & Telegram Poster
 
 on:
+  push:
+    branches:
+      - main
   schedule:
     # Runs every 2 hours (12 times a day) so new notifications are caught quickly
     - cron: '0 */2 * * *'

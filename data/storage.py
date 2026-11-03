@@ -3,7 +3,7 @@ import os
 import re
 import hashlib
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 DATA_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "history.json")
 
@@ -14,9 +14,6 @@ def _ensure_file():
             json.dump({"posted": {}, "reminders_sent": {}}, f, indent=2)
 
 def normalize_url(url: str) -> str:
-    """
-    Normalizes a URL by stripping fragments, query params, trailing slashes, and lowercasing.
-    """
     if not url:
         return ""
     clean = url.strip()
@@ -24,13 +21,6 @@ def normalize_url(url: str) -> str:
     return clean.rstrip("/").lower()
 
 def normalize_title(title: str) -> str:
-    """
-    Cleans title to extract core semantic words:
-    - Removes emojis, badges (NEW, Click here, etc.)
-    - Removes relative time phrases ('126 days ago', '2 weeks ago', etc.)
-    - Removes punctuation and extra whitespace
-    - Lowercases
-    """
     if not title:
         return ""
 
@@ -73,14 +63,6 @@ def extract_distinctive_category(title: str) -> str:
     return "general"
 
 def is_already_posted(notification_id: str, notice: Optional[Dict[str, Any]] = None) -> bool:
-    """
-    Robust multi-level duplicate detection:
-    1. Direct notification ID check in history.json
-    2. Same PDF / document file already posted for this state
-    3. Same specific subpage URL already posted for this state
-    4. Exact normalized title match for the same state
-    5. Event-level deduplication for Central NSP (guarantees NO repetitive extension notices)
-    """
     _ensure_file()
     try:
         with open(DATA_FILE, "r", encoding="utf-8") as f:
@@ -89,7 +71,6 @@ def is_already_posted(notification_id: str, notice: Optional[Dict[str, Any]] = N
     except Exception:
         return False
 
-    # 1. Exact ID check
     if notification_id and notification_id in posted:
         return True
 
@@ -118,20 +99,16 @@ def is_already_posted(notification_id: str, notice: Optional[Dict[str, Any]] = N
         prev_norm_title = normalize_title(prev_title)
         prev_category = extract_distinctive_category(prev_title)
 
-        # Safeguard: Different core categories are not duplicates
         if new_category != "general" and prev_category != "general" and new_category != prev_category:
             continue
 
-        # 2. Check identical PDF/Document URL
         if is_doc and new_pdf and prev_pdf:
             if new_pdf == prev_pdf:
                 return True
 
-        # 3. Check identical normalized title
         if new_norm_title and prev_norm_title and new_norm_title == prev_norm_title:
             return True
 
-        # 4. Check specific subpage URL match
         if new_apply and prev_apply and new_apply == prev_apply:
             path_parts = [p for p in new_apply.split("/") if p and ":" not in p]
             if len(path_parts) > 1:
@@ -141,8 +118,6 @@ def is_already_posted(notification_id: str, notice: Optional[Dict[str, Any]] = N
                     if overlap >= 0.5:
                         return True
 
-        # 5. Central NSP Event & Deadline deduplication:
-        # If Central NSP already posted any extension notice, NEVER post another extension notice
         if "central" in state.lower() or "nsp" in state.lower():
             if is_extension_notice(new_title) and is_extension_notice(prev_title):
                 return True
@@ -186,6 +161,31 @@ def get_active_notifications() -> dict:
             return data.get("posted", {})
     except Exception:
         return {}
+
+def get_recent_notices_for_state(state: str, limit: int = 5) -> List[Dict]:
+    """
+    Returns the latest posted notices for a given state to enable AI semantic deduplication.
+    """
+    _ensure_file()
+    try:
+        with open(DATA_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            posted = data.get("posted", {})
+    except Exception:
+        return []
+
+    state_clean = state.strip().lower()
+    matches = []
+    for k, v in posted.items():
+        if (v.get("state") or "").strip().lower() == state_clean:
+            matches.append({
+                "title": v.get("title", ""),
+                "last_date": v.get("last_date", ""),
+                "posted_at": v.get("posted_at", "")
+            })
+
+    matches.sort(key=lambda x: x.get("posted_at", ""), reverse=True)
+    return matches[:limit]
 
 def is_reminder_sent(reminder_key: str) -> bool:
     _ensure_file()
