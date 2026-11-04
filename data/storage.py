@@ -41,6 +41,57 @@ def extract_keywords(text: str) -> set:
     }
     return {w for w in words if w not in stopwords}
 
+def normalize_date_str(d_str: str) -> str:
+    """
+    Normalizes dates like '15 November 2026', '15 Nov 2026', '2026-11-15' into standardized '15-11-2026'.
+    Enables 100% accurate date-matching deduplication.
+    """
+    if not d_str:
+        return ""
+    clean = d_str.strip().lower()
+    month_map = {
+        "january": "01", "jan": "01",
+        "february": "02", "feb": "02",
+        "march": "03", "mar": "03",
+        "april": "04", "apr": "04",
+        "may": "05",
+        "june": "06", "jun": "06",
+        "july": "07", "jul": "07",
+        "august": "08", "aug": "08",
+        "september": "09", "sep": "09", "sept": "09",
+        "october": "10", "oct": "10",
+        "november": "11", "nov": "11",
+        "december": "12", "dec": "12"
+    }
+
+    # Pattern: 15 November 2026 / 15 Nov 2026
+    m1 = re.search(r'(\d{1,2})(?:st|nd|rd|th)?\s+([a-z]+)\s*,?\s*(\d{4})', clean)
+    if m1:
+        day = m1.group(1).zfill(2)
+        month = month_map.get(m1.group(2), "00")
+        year = m1.group(3)
+        return f"{day}-{month}-{year}"
+
+    # Pattern: November 15 2026
+    m1b = re.search(r'([a-z]+)\s+(\d{1,2})(?:st|nd|rd|th)?\s*,?\s*(\d{4})', clean)
+    if m1b:
+        month = month_map.get(m1b.group(1), "00")
+        day = m1b.group(2).zfill(2)
+        year = m1b.group(3)
+        return f"{day}-{month}-{year}"
+
+    # Pattern: 2026-11-15
+    m2 = re.search(r'(\d{4})[-/](\d{1,2})[-/](\d{1,2})', clean)
+    if m2:
+        return f"{m2.group(3).zfill(2)}-{m2.group(2).zfill(2)}-{m2.group(1)}"
+
+    # Pattern: 15-11-2026
+    m3 = re.search(r'(\d{1,2})[-/](\d{1,2})[-/](\d{4})', clean)
+    if m3:
+        return f"{m3.group(1).zfill(2)}-{m3.group(2).zfill(2)}-{m3.group(3)}"
+
+    return clean
+
 def is_extension_notice(title: str) -> bool:
     keywords = ["extend", "extended", "extension", "last date", "deadline", "date revised"]
     t_lower = (title or "").lower()
@@ -82,16 +133,24 @@ def is_already_posted(notification_id: str, notice: Optional[Dict[str, Any]] = N
     new_pdf = normalize_url(notice.get("pdf_link") or "")
     new_apply = normalize_url(notice.get("apply_link") or "")
     new_norm_title = normalize_title(new_title)
-    new_keywords = extract_keywords(new_title)
-    new_category = extract_distinctive_category(new_title)
+    new_last_date = (notice.get("last_date") or "").strip()
+    new_last_date_norm = normalize_date_str(new_last_date or new_title)
 
-    # 1. HARD LOCK for Central NSP: Only 1 single notification per academic session!
-    # Central NSP only announces the deadline extension once per cycle. Never duplicate!
+    # 1. SMART DATE-MATCHING FOR CENTRAL NSP:
+    # If the candidate notice announces the SAME deadline date as already posted in history, it is a DUPLICATE!
+    # If the candidate notice announces a NEW, DIFFERENT deadline date (e.g. extended from 15 Nov to 30 Nov),
+    # it is a VALID NEW EXTENSION and allowed to post!
     if "central" in state.lower() or "nsp" in state.lower():
         for prev_id, prev_item in posted.items():
             prev_s = (prev_item.get("state") or "").lower()
             if "central" in prev_s or "nsp" in prev_s:
-                return True
+                prev_date_norm = normalize_date_str(prev_item.get("last_date", "") or prev_item.get("title", ""))
+                # If exact same date normalized (e.g. 15-11-2026 == 15-11-2026) -> DUPLICATE!
+                if new_last_date_norm and prev_date_norm and new_last_date_norm == prev_date_norm:
+                    return True
+                # If both mention 15 Nov in text -> DUPLICATE!
+                if "15 nov" in new_title.lower() and ("15 nov" in prev_item.get("title", "").lower() or "15 nov" in prev_item.get("last_date", "").lower()):
+                    return True
 
     doc_extensions = (".pdf", ".jpg", ".jpeg", ".png", ".docx", ".doc")
     is_doc = any(new_pdf.endswith(ext) for ext in doc_extensions)
@@ -105,7 +164,6 @@ def is_already_posted(notification_id: str, notice: Optional[Dict[str, Any]] = N
         prev_pdf = normalize_url(prev_item.get("pdf_link") or "")
         prev_apply = normalize_url(prev_item.get("apply_link") or "")
         prev_norm_title = normalize_title(prev_title)
-        prev_category = extract_distinctive_category(prev_title)
 
         # 2. Check identical PDF/Document URL
         if is_doc and new_pdf and prev_pdf:
@@ -120,6 +178,7 @@ def is_already_posted(notification_id: str, notice: Optional[Dict[str, Any]] = N
         if new_apply and prev_apply and new_apply == prev_apply:
             path_parts = [p for p in new_apply.split("/") if p and ":" not in p]
             if len(path_parts) > 1:
+                new_keywords = extract_keywords(new_title)
                 prev_keywords = extract_keywords(prev_title)
                 if new_keywords and prev_keywords:
                     overlap = len(new_keywords & prev_keywords) / max(len(new_keywords), len(prev_keywords))

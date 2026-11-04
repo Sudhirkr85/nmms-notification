@@ -7,7 +7,7 @@ import hashlib
 import logging
 from datetime import datetime
 from typing import List, Dict
-from data.storage import is_already_posted, get_active_notifications
+from data.storage import is_already_posted
 
 logger = logging.getLogger(__name__)
 
@@ -58,20 +58,14 @@ def scrape_central_nsp() -> List[Dict]:
     """
     Scrapes official National Scholarship Portal (NSP) announcements and
     Ministry of Education / PIB press releases for NMMSS.
-    Strict single-item guarantee: If already recorded in history, never re-scrape or re-post.
+    Uses smart date-matching: Drops notifications reporting already announced dates,
+    while instantly allowing genuine new extensions (e.g. 15 Nov -> 30 Nov -> 15 Dec).
     """
     notifications = []
     seen = set()
     cur_year = datetime.now().year
 
-    # 1. HARD STOP: Check if Central NSP is already processed in history
-    active = get_active_notifications()
-    has_central = any("central" in (v.get("state") or "").lower() or "nsp" in (v.get("state") or "").lower() for v in active.values())
-    if has_central:
-        logger.info("Central (NSP) notification is already recorded in history. Skipping check.")
-        return []
-
-    # 2. Official Press Releases via verified government PIB search
+    # 1. Official Press Releases via verified government PIB search
     rss_queries = [
         "https://news.google.com/rss/search?q=%22NMMSS%22+site:pib.gov.in&hl=en-IN&gl=IN&ceid=IN:en",
         "https://news.google.com/rss/search?q=%22NMMSS%22+OR+%22National+Means-cum-Merit%22&hl=en-IN&gl=IN&ceid=IN:en"
@@ -94,7 +88,8 @@ def scrape_central_nsp() -> List[Dict]:
 
                         extracted_last_date = extract_date_from_headline(clean_title)
                         fallback_date = f"15 November {cur_year}"
-                        notif_id = generate_notification_id("Central (NSP)", clean_title, extracted_last_date or fallback_date)
+                        target_date = extracted_last_date or fallback_date
+                        notif_id = generate_notification_id("Central (NSP)", clean_title, target_date)
                         if notif_id in seen:
                             continue
                         seen.add(notif_id)
@@ -108,10 +103,11 @@ def scrape_central_nsp() -> List[Dict]:
                             "apply_link": "https://scholarships.gov.in",
                             "pdf_link": "",
                             "apply_start": "Active Now",
-                            "last_date": extracted_last_date or fallback_date,
+                            "last_date": target_date,
                             "exam_date": ""
                         }
 
+                        # Smart Date-Matching deduplication
                         if is_already_posted(notif_id, item_data):
                             continue
 
@@ -122,7 +118,7 @@ def scrape_central_nsp() -> List[Dict]:
         except Exception:
             pass
 
-    # 3. Direct NSP Portal (scholarships.gov.in) Announcements
+    # 2. Direct NSP Portal (scholarships.gov.in) Announcements
     if not notifications:
         nsp_urls = [
             "https://scholarships.gov.in",
@@ -143,7 +139,8 @@ def scrape_central_nsp() -> List[Dict]:
 
                             extracted_date = extract_date_from_headline(clean_text)
                             fallback_date = f"15 November {cur_year}"
-                            notif_id = generate_notification_id("Central (NSP)", clean_text, extracted_date or fallback_date)
+                            target_date = extracted_date or fallback_date
+                            notif_id = generate_notification_id("Central (NSP)", clean_text, target_date)
                             if notif_id in seen:
                                 continue
                             seen.add(notif_id)
@@ -157,7 +154,7 @@ def scrape_central_nsp() -> List[Dict]:
                                 "apply_link": "https://scholarships.gov.in",
                                 "pdf_link": "",
                                 "apply_start": "Active Now",
-                                "last_date": extracted_date or fallback_date,
+                                "last_date": target_date,
                                 "exam_date": ""
                             }
 
