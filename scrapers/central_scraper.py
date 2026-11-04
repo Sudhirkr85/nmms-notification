@@ -4,9 +4,12 @@ from bs4 import BeautifulSoup
 import re
 import urllib3
 import hashlib
+import logging
 from datetime import datetime
 from typing import List, Dict
-from data.storage import is_already_posted
+from data.storage import is_already_posted, get_active_notifications
+
+logger = logging.getLogger(__name__)
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -55,13 +58,20 @@ def scrape_central_nsp() -> List[Dict]:
     """
     Scrapes official National Scholarship Portal (NSP) announcements and
     Ministry of Education / PIB press releases for NMMSS.
-    Strict single-item deduplication and dynamic year handling.
+    Strict single-item guarantee: If already recorded in history, never re-scrape or re-post.
     """
     notifications = []
     seen = set()
     cur_year = datetime.now().year
 
-    # 1. Official Press Releases via verified government PIB search
+    # 1. HARD STOP: Check if Central NSP is already processed in history
+    active = get_active_notifications()
+    has_central = any("central" in (v.get("state") or "").lower() or "nsp" in (v.get("state") or "").lower() for v in active.values())
+    if has_central:
+        logger.info("Central (NSP) notification is already recorded in history. Skipping check.")
+        return []
+
+    # 2. Official Press Releases via verified government PIB search
     rss_queries = [
         "https://news.google.com/rss/search?q=%22NMMSS%22+site:pib.gov.in&hl=en-IN&gl=IN&ceid=IN:en",
         "https://news.google.com/rss/search?q=%22NMMSS%22+OR+%22National+Means-cum-Merit%22&hl=en-IN&gl=IN&ceid=IN:en"
@@ -112,7 +122,7 @@ def scrape_central_nsp() -> List[Dict]:
         except Exception:
             pass
 
-    # 2. Direct NSP Portal (scholarships.gov.in) Announcements
+    # 3. Direct NSP Portal (scholarships.gov.in) Announcements
     if not notifications:
         nsp_urls = [
             "https://scholarships.gov.in",

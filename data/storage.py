@@ -85,6 +85,14 @@ def is_already_posted(notification_id: str, notice: Optional[Dict[str, Any]] = N
     new_keywords = extract_keywords(new_title)
     new_category = extract_distinctive_category(new_title)
 
+    # 1. HARD LOCK for Central NSP: Only 1 single notification per academic session!
+    # Central NSP only announces the deadline extension once per cycle. Never duplicate!
+    if "central" in state.lower() or "nsp" in state.lower():
+        for prev_id, prev_item in posted.items():
+            prev_s = (prev_item.get("state") or "").lower()
+            if "central" in prev_s or "nsp" in prev_s:
+                return True
+
     doc_extensions = (".pdf", ".jpg", ".jpeg", ".png", ".docx", ".doc")
     is_doc = any(new_pdf.endswith(ext) for ext in doc_extensions)
 
@@ -99,16 +107,16 @@ def is_already_posted(notification_id: str, notice: Optional[Dict[str, Any]] = N
         prev_norm_title = normalize_title(prev_title)
         prev_category = extract_distinctive_category(prev_title)
 
-        if new_category != "general" and prev_category != "general" and new_category != prev_category:
-            continue
-
+        # 2. Check identical PDF/Document URL
         if is_doc and new_pdf and prev_pdf:
             if new_pdf == prev_pdf:
                 return True
 
+        # 3. Check identical normalized title
         if new_norm_title and prev_norm_title and new_norm_title == prev_norm_title:
             return True
 
+        # 4. Check specific subpage URL match
         if new_apply and prev_apply and new_apply == prev_apply:
             path_parts = [p for p in new_apply.split("/") if p and ":" not in p]
             if len(path_parts) > 1:
@@ -118,21 +126,19 @@ def is_already_posted(notification_id: str, notice: Optional[Dict[str, Any]] = N
                     if overlap >= 0.5:
                         return True
 
-        if "central" in state.lower() or "nsp" in state.lower():
-            if is_extension_notice(new_title) and is_extension_notice(prev_title):
-                return True
-
-            prev_keywords = extract_keywords(prev_title)
-            if new_keywords and prev_keywords:
-                intersection = len(new_keywords & prev_keywords)
-                union = len(new_keywords | prev_keywords)
-                jaccard = intersection / union if union > 0 else 0
-                if jaccard >= 0.35:
-                    return True
-
     return False
 
-def record_posted(notification_id: str, state: str, title: str, apply_link: str, pdf_link: str, last_date: str = "", message_id: int = None):
+def record_posted(
+    notification_id: str,
+    state: str,
+    title: str,
+    apply_link: str,
+    pdf_link: str,
+    last_date: str = "",
+    message_id: int = None,
+    ai_summary: str = "",
+    category: str = ""
+):
     _ensure_file()
     try:
         with open(DATA_FILE, "r", encoding="utf-8") as f:
@@ -143,6 +149,8 @@ def record_posted(notification_id: str, state: str, title: str, apply_link: str,
     data.setdefault("posted", {})[notification_id] = {
         "state": state,
         "title": title,
+        "ai_summary": ai_summary,
+        "category": category,
         "apply_link": apply_link,
         "pdf_link": pdf_link,
         "last_date": last_date,
@@ -164,7 +172,8 @@ def get_active_notifications() -> dict:
 
 def get_recent_notices_for_state(state: str, limit: int = 5) -> List[Dict]:
     """
-    Returns the latest posted notices for a given state to enable AI semantic deduplication.
+    Returns the latest posted notices for a given state, including AI Event Summaries,
+    to enable Groq AI semantic deduplication.
     """
     _ensure_file()
     try:
@@ -180,6 +189,8 @@ def get_recent_notices_for_state(state: str, limit: int = 5) -> List[Dict]:
         if (v.get("state") or "").strip().lower() == state_clean:
             matches.append({
                 "title": v.get("title", ""),
+                "ai_summary": v.get("ai_summary", "") or v.get("title", ""),
+                "category": v.get("category", ""),
                 "last_date": v.get("last_date", ""),
                 "posted_at": v.get("posted_at", "")
             })

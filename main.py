@@ -137,6 +137,12 @@ def process_and_post_notice(notice: dict) -> int:
     )
 
     if msg_id:
+        ai_summary_point = ""
+        if ai_data.get("highlights_hi"):
+            ai_summary_point = str(ai_data["highlights_hi"][0]).strip()
+        elif ai_data.get("clean_title"):
+            ai_summary_point = str(ai_data["clean_title"]).strip()
+
         record_posted(
             notification_id=notif_id,
             state=notice["state"],
@@ -144,7 +150,9 @@ def process_and_post_notice(notice: dict) -> int:
             apply_link=apply_url or "",
             pdf_link=pdf_url or "",
             last_date=final_last or notice.get("last_date", ""),
-            message_id=msg_id
+            message_id=msg_id,
+            ai_summary=ai_summary_point,
+            category=final_update_type
         )
         logger.info(f"   -> [POSTED SUCCESS] Message ID {msg_id} sent for {state}: '{final_title}'")
 
@@ -157,7 +165,7 @@ def process_and_post_notice(notice: dict) -> int:
     return 0
 
 def run_nmms_pipeline():
-    # 0. Automatically purge any previously posted bad / junk messages from Telegram channel
+    # 0. Automatically purge any previously posted bad / duplicate messages from Telegram channel
     try:
         purge_bad_messages(DATA_FILE)
     except Exception as e:
