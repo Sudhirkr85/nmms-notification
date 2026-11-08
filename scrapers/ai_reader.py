@@ -96,6 +96,18 @@ def get_fallback_highlights(category: str, state: str = "", title: str = "") -> 
             ]
         }
 
+    if cat == "ANSWER_KEY" or any(w in (title or "").lower() for w in ["answer key", "ans key", "uttar kunji", "objection", "उत्तर कुंजी", "उत्तरमाला", "आपत्ति"]):
+        return {
+            "en": [
+                f"Official Provisional Answer Key released for {state} NMMS Examination.",
+                "Candidates can verify answers and submit online objections with supporting proof before the deadline."
+            ],
+            "hi": [
+                f"{state} NMMS परीक्षा की आधिकारिक अनंतिम उत्तरमाला (Answer Key) जारी।",
+                "अभ्यर्थी उत्तरों का मिलान करें एवं किसी विसंगति पर निर्धारित अंतिम तिथि तक साक्ष्य सहित आपत्ति दर्ज कराएं।"
+            ]
+        }
+
     return {
         "en": [
             f"Official {cat.replace('_', ' ').title()} notice issued by {state} Education Authority.",
@@ -107,7 +119,7 @@ def get_fallback_highlights(category: str, state: str = "", title: str = "") -> 
         ]
     }
 
-def analyze_notice_with_groq(state: str, title: str, notice_url: str = "", recent_posts: list = None) -> dict:
+def analyze_notice_with_groq(state: str, title: str, notice_url: str = "", recent_posts: list = None, raw_text: str = "") -> dict:
     """
     100% AI-Driven Quality Gatekeeper, Semantic Deduplicator, and Notice-Specific Fact Extractor.
     Powered by Groq LLaMA-3.3-70B.
@@ -128,8 +140,8 @@ def analyze_notice_with_groq(state: str, title: str, notice_url: str = "", recen
             items.append(f"[{idx}] Title: '{p.get('title')}' | Last Date: {p.get('last_date', 'N/A')}")
         recent_posts_summary = "\n".join(items)
 
-    extracted_text = ""
-    if notice_url and notice_url.startswith("http"):
+    extracted_text = raw_text.strip() if raw_text else ""
+    if not extracted_text and notice_url and notice_url.startswith("http"):
         extracted_text = extract_content_from_url(notice_url)
 
     if not api_key:

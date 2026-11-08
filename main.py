@@ -58,7 +58,8 @@ def process_and_post_notice(notice: dict) -> int:
     recent_posts = get_recent_notices_for_state(state, limit=5)
 
     # 100% Groq LLaMA-3.3-70B AI Quality Gatekeeper & Semantic Deduplicator
-    ai_data = analyze_notice_with_groq(state, notice["title"], target_url, recent_posts=recent_posts)
+    raw_ctx = notice.get("content_context", "")
+    ai_data = analyze_notice_with_groq(state, notice["title"], target_url, recent_posts=recent_posts, raw_text=raw_ctx)
 
     # GATE 1: AI Student-Actionable Check (Rejects DEO letters, question papers, attendance sheets)
     if not ai_data.get("is_student_actionable", True):

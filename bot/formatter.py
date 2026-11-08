@@ -24,7 +24,7 @@ def detect_notification_category(title: str, update_type: str = ""):
             "summary": "NMMS Examination Result & Selected Candidate List has been published!"
         }
 
-    if any(k in combined for k in ["answer key", "ans key", "objection", "model key", "answer_key"]):
+    if any(k in combined for k in ["answer key", "ans key", "objection", "model key", "answer_key", "उत्तर कुंजी", "उत्तरमाला", "आपत्ति"]):
         return {
             "type": "ANSWER_KEY",
             "badge": "📝 <b>NMMS OFFICIAL ANSWER KEY RELEASED</b>",
@@ -131,6 +131,14 @@ def format_nmms_notification(
 🏫 <b>स्कूल / L1 वेरिफिकेशन      :</b> <b>30 November {cur_year}</b>
 🏛️ <b>जिला / L2 वेरिफिकेशन       :</b> <b>15 December {cur_year}</b>
 💰 <b>छात्रवृत्ति राशि              :</b> <b>₹12,000 प्रति वर्ष (DBT)</b>
+"""
+    elif category["type"] == "ANSWER_KEY":
+        display_last = last_date or "13 November 2026 (06:00 PM)"
+        display_exam = exam_date or "Held on 01 November 2026"
+        dates_content = f"""━━━━━━━━━━━━━━━━━━━━━
+📅 <b>IMPORTANT DATES / महत्वपूर्ण तिथियां:</b>
+🔴 <b>आपत्ति दर्ज करने की अंतिम तिथि :</b> <b>⚡ {html.escape(display_last)} ⚡</b>
+🟡 <b>परीक्षा की तिथि (Exam Date)  :</b> <b>{html.escape(display_exam)}</b>
 """
     elif category["type"] in ["APPLICATION_FORM", "DATE_EXTENSION", "EXAM_DATE"] or has_dates:
         dates_content = f"""━━━━━━━━━━━━━━━━━━━━━
