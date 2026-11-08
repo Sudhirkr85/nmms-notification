@@ -1,7 +1,23 @@
 """
 Official state-wise SCERT / Education Department URLs, aliases, and Hindi names for NMMS
-Excludes South Indian non-Hindi regions (Karnataka, Kerala, Tamil Nadu, Andhra Pradesh, Telangana)
+Tracks exclusively: Bihar, UP, MP, Rajasthan, Haryana, Delhi, Jharkhand, CG, HP, UK (+ Central NSP)
 """
+
+import os
+from typing import List
+
+# Target states strictly tracked: 10 states + CENTRAL
+TARGET_STATES: List[str] = [
+    "Bihar", "Uttar Pradesh", "Madhya Pradesh", "Rajasthan", "Haryana",
+    "Delhi", "Jharkhand", "Chhattisgarh", "Himachal Pradesh", "Uttarakhand"
+]
+TARGET_STATES_AND_CENTRAL: List[str] = ["CENTRAL"] + TARGET_STATES
+
+# Official extra vendor / third-party domains explicitly whitelisted
+# Empty by default. User can configure or add verified domains here.
+OFFICIAL_EXTRA_DOMAINS: List[str] = [
+    d.strip().lower() for d in os.getenv("OFFICIAL_EXTRA_DOMAINS", "").split(",") if d.strip()
+]
 
 STATE_CONFIG = {
     "Bihar": {
@@ -32,33 +48,12 @@ STATE_CONFIG = {
         "hindi_name": "मध्य प्रदेश",
         "keywords": ["NMMS", "NMMSS", "National Means", "राष्ट्रीय आय"]
     },
-    "Maharashtra": {
-        "authority": "MSCE Pune",
-        "official_url": "https://www.mscepune.in",
-        "alias": "Maharashtra",
-        "hindi_name": "महाराष्ट्र",
-        "keywords": ["NMMS", "NMMSS", "National Means", "शिष्यवृत्ती"]
-    },
-    "Gujarat": {
-        "authority": "State Examination Board (SEB Gujarat)",
-        "official_url": "https://sebexam.org",
-        "alias": "Gujarat",
-        "hindi_name": "गुजरात",
-        "keywords": ["NMMS", "NMMSS", "National Means"]
-    },
     "Haryana": {
         "authority": "BSEH / SCERT Haryana",
         "official_url": "https://bseh.org.in",
         "alias": "Haryana",
         "hindi_name": "हरियाणा",
         "keywords": ["NMMS", "NMMSS", "National Means", "राष्ट्रीय आय"]
-    },
-    "Punjab": {
-        "authority": "SCERT Punjab",
-        "official_url": "https://ssapunjab.org",
-        "alias": "Punjab",
-        "hindi_name": "पंजाब",
-        "keywords": ["NMMS", "NMMSS", "National Means"]
     },
     "Delhi": {
         "authority": "Directorate of Education Delhi",

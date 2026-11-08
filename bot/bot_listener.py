@@ -6,7 +6,7 @@ import logging
 from dotenv import load_dotenv
 
 load_dotenv()
-from bot.payment import create_payment_link, create_single_use_invite_link
+from bot.payment import create_payment_link
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +78,7 @@ def poll_bot():
                     offset = update["update_id"] + 1
                     if "message" in update:
                         handle_user_message(update["message"])
-        except Exception as e:
+        except Exception:
             time.sleep(2)
 
 if __name__ == "__main__":

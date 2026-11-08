@@ -1,165 +1,166 @@
+"""
+Hindi Telegram Message Formatter for NMMS Bot.
+Strictly generates Hindi messages formatted as:
+[event emoji + name] | State | What happened | Date | Official button/PDF
+
+Escapes all dynamic strings using html.escape and trims text to 4000 chars.
+"""
+
 import re
 import html
-from datetime import datetime
+from typing import List, Dict, Optional
 
-def detect_notification_category(title: str, update_type: str = ""):
-    """
-    Reads and analyzes the notice text and AI category to detect its exact type.
-    """
-    combined = f"{title} {update_type}".lower()
+HINDI_STATE_NAMES = {
+    "bihar": "बिहार",
+    "uttar pradesh": "उत्तर प्रदेश",
+    "rajasthan": "राजस्थान",
+    "madhya pradesh": "मध्य प्रदेश",
+    "haryana": "हरियाणा",
+    "delhi": "दिल्ली",
+    "jharkhand": "झारखंड",
+    "chhattisgarh": "छत्तीसगढ़",
+    "himachal pradesh": "हिमाचल प्रदेश",
+    "uttarakhand": "उत्तराखंड",
+    "central": "केंद्र सरकार (राष्ट्रीय स्तर)",
+    "central (nsp)": "केंद्र सरकार (NSP पोर्टल)"
+}
 
-    if any(k in combined for k in ["admit card", "hall ticket", "admit-card", "roll no", "admit_card"]):
-        return {
-            "type": "ADMIT_CARD",
-            "badge": "🎫 <b>NMMS ADMIT CARD RELEASED</b>",
-            "action_btn": "🎫 Download Admit Card",
-            "summary": "Admit Cards are now available for download. Download before the exam date!"
-        }
-
-    if any(k in combined for k in ["result", "merit list", "selected list", "selection list", "marks"]):
-        return {
-            "type": "RESULT",
-            "badge": "🏆 <b>NMMS RESULT / MERIT LIST DECLARED</b>",
-            "action_btn": "🏆 Check Result / Merit List",
-            "summary": "NMMS Examination Result & Selected Candidate List has been published!"
-        }
-
-    if any(k in combined for k in ["answer key", "ans key", "objection", "model key", "answer_key", "उत्तर कुंजी", "उत्तरमाला", "आपत्ति"]):
-        return {
-            "type": "ANSWER_KEY",
-            "badge": "📝 <b>NMMS OFFICIAL ANSWER KEY RELEASED</b>",
-            "action_btn": "📝 Check Official Answer Key",
-            "summary": "Official Provisional Answer Key released. Check answers and file objections if any."
-        }
-
-    if any(k in combined for k in ["extended", "extension", "extends", "extend", "last date extend", "deadline", "date badha", "date_extension"]):
-        return {
-            "type": "DATE_EXTENSION",
-            "badge": "⏰ <b>NMMS LAST DATE EXTENDED</b>",
-            "action_btn": "🌐 Apply on Official NSP Portal" if ("nsp" in combined or "central" in combined) else "🌐 Apply Extended Form",
-            "summary": "Application deadline has been extended! Students who missed earlier can now apply."
-        }
-
-    if any(k in combined for k in ["exam date", "schedule", "time table", "pariksha tithi", "exam_date"]):
-        return {
-            "type": "EXAM_DATE",
-            "badge": "📅 <b>NMMS EXAM DATE ANNOUNCED</b>",
-            "action_btn": "📅 View Exam Schedule",
-            "summary": "Official NMMS Examination date and time table announced by the department."
-        }
-
-    if any(k in combined for k in ["apply", "registration", "online form", "application", "aavedan", "application_form"]):
-        return {
-            "type": "APPLICATION_FORM",
-            "badge": "🟢 <b>NMMS NEW APPLICATION FORM LIVE</b>",
-            "action_btn": "🌐 Apply Online Form",
-            "summary": "NMMS Scholarship Online Application Form is now open for Class 8 students."
-        }
-
-    # Default general notice
-    return {
-        "type": "CIRCULAR",
-        "badge": "📄 <b>NMMS OFFICIAL CIRCULAR / UPDATE</b>",
-        "action_btn": "📄 View Official Notice",
-        "summary": "New official circular / update issued by the Education Department."
+EVENT_META = {
+    "FORM_START": {
+        "header": "🟢 <b>नया आवेदन शुरू (Application Form Live)</b>",
+        "btn": "🌐 ऑनलाइन आवेदन करें"
+    },
+    "LAST_DATE": {
+        "header": "🔴 <b>आवेदन की अंतिम तिथि (Last Date)</b>",
+        "btn": "🌐 अंतिम तिथि से पहले आवेदन करें"
+    },
+    "EXTENSION": {
+        "header": "⏰ <b>अंतिम तिथि बढ़ाई गई (Date Extended)</b>",
+        "btn": "🌐 विस्तृत तिथि पर आवेदन करें"
+    },
+    "CORRECTION": {
+        "header": "✏️ <b>आवेदन संशोधन विंडो (Correction Window)</b>",
+        "btn": "✏️ फॉर्म में सुधार / संशोधन करें"
+    },
+    "EXAM_DATE": {
+        "header": "📅 <b>परीक्षा तिथि घोषित (Exam Date Announced)</b>",
+        "btn": "📅 परीक्षा कार्यक्रम देखें"
+    },
+    "ADMIT_CARD": {
+        "header": "🎫 <b>प्रवेश पत्र जारी (Admit Card Released)</b>",
+        "btn": "🎫 एडमिट कार्ड डाउनलोड करें"
+    },
+    "ANSWER_KEY": {
+        "header": "📝 <b>आधिकारिक उत्तर कुंजी जारी (Answer Key Released)</b>",
+        "btn": "📝 उत्तर कुंजी व आपत्ति दर्ज करें"
+    },
+    "RESULT": {
+        "header": "🏆 <b>परीक्षा परिणाम / मेरिट सूची (Result Declared)</b>",
+        "btn": "🏆 रिजल्ट व मेरिट लिस्ट देखें"
+    },
+    "NSP_APPLY": {
+        "header": "🌐 <b>NSP छात्रवृत्ति आवेदन (NSP Apply Update)</b>",
+        "btn": "🌐 scholarships.gov.in पर जाएं"
+    },
+    "NSP_OTHER": {
+        "header": "🏛️ <b>NSP आधिकारिक सूचना (NSP Update)</b>",
+        "btn": "🌐 आधिकारिक पोर्टल देखें"
     }
+}
 
-def format_nmms_notification(
+def get_hindi_state(state: str) -> str:
+    s_clean = (state or "").strip().lower()
+    return HINDI_STATE_NAMES.get(s_clean, state)
+
+def get_event_meta(event_type: str) -> dict:
+    e_clean = (event_type or "").strip().upper()
+    return EVENT_META.get(e_clean, {
+        "header": "📢 <b>NMMS आधिकारिक सूचना (Official Update)</b>",
+        "btn": "📄 आधिकारिक सूचना देखें"
+    })
+
+def clean_title_no_midword_truncation(text: str, max_len: int = 80) -> str:
+    """Truncates title cleanly without cutting mid-word."""
+    if not text or len(text) <= max_len:
+        return text or ""
+    sub = text[:max_len]
+    last_space = sub.rfind(" ")
+    if last_space > max_len // 2:
+        return sub[:last_space].strip()
+    return sub.strip()
+
+def format_hindi_nmms_notification(
     state: str,
-    authority: str,
-    update_type: str,
+    event_type: str,
     title: str,
-    apply_start: str = "",
+    summary_hi: str,
+    dates: Optional[List[Dict[str, str]]] = None,
     last_date: str = "",
     exam_date: str = "",
-    apply_link: str = "",
-    pdf_link: str = "",
-    highlights_en: list = None,
-    highlights_hi: list = None,
-    summary_en: str = "",
-    summary_hi: str = ""
+    official_url: str = "",
+    pdf_url: str = "",
+    title_hi: str = "",
+    is_news_corroborated: bool = False
 ) -> str:
     """
-    Smart contextual notification with English & Hindi bilingual AI bullet points and clear official links.
-    Dynamic year-aware.
+    Builds the Telegram message strictly in Hindi.
+    Format:
+    [event emoji + name]
+    राज्य: {state}
+    क्या हुआ: {summary_hi}
+    महत्वपूर्ण तिथियां: {dates}
+    आधिकारिक लिंक
     """
-    category = detect_notification_category(title, update_type)
-    is_central = ("central" in state.lower() or "nsp" in state.lower() or "nsp" in authority.lower())
-    cur_year = datetime.now().year
+    meta = get_event_meta(event_type)
+    state_hi = html.escape(get_hindi_state(state))
+    display_title = title_hi.strip() if title_hi else clean_title_no_midword_truncation(title, 80)
+    safe_title = html.escape(display_title)
+    safe_summary = html.escape((summary_hi or safe_title).strip())
 
-    if is_central:
-        target_link = "https://scholarships.gov.in"
-        link_caption = "🔗 Official NSP Portal: scholarships.gov.in"
-    else:
-        target_link = pdf_link if (pdf_link and pdf_link.startswith("http")) else apply_link
-        link_caption = "🔗 Click Here to View / Download Notice"
+    # Dates block (do not print fake dates like session strings '2024-25')
+    date_lines = []
+    if dates:
+        for d in dates:
+            lbl = html.escape(str(d.get("label", "तिथि")).strip())
+            val = str(d.get("value", "")).strip()
+            if val and not re.match(r'^\d{4}[-/]\d{2,4}$', val):
+                date_lines.append(f"• <b>{lbl}:</b> {html.escape(val)}")
 
-    if not target_link or not target_link.startswith("http"):
-        target_link = "https://scholarships.gov.in"
+    if not date_lines:
+        if last_date and not re.match(r'^\d{4}[-/]\d{2,4}$', last_date):
+            date_lines.append(f"• <b>अंतिम तिथि:</b> {html.escape(last_date)}")
+        if exam_date and not re.match(r'^\d{4}[-/]\d{2,4}$', exam_date):
+            date_lines.append(f"• <b>परीक्षा तिथि:</b> {html.escape(exam_date)}")
 
-    safe_title = html.escape(title.strip())
-    safe_state = html.escape(state.strip().upper())
-    safe_authority = html.escape(authority.strip())
+    dates_section = ""
+    if date_lines:
+        dates_section = "━━━━━━━━━━━━━━━━━━━━━\n📅 <b>महत्वपूर्ण तिथियां (Important Dates):</b>\n" + "\n".join(date_lines) + "\n"
 
-    # Build Highlights Block (Bilingual English + Hindi)
-    en_points = highlights_en or ([summary_en] if summary_en else [])
-    hi_points = highlights_hi or ([summary_hi] if summary_hi else [])
+    target_link = pdf_url if (pdf_url and pdf_url.startswith("http")) else (official_url or "https://scholarships.gov.in")
+    safe_link = html.escape(target_link)
+    link_text = "📄 आधिकारिक नोटिस (PDF) यहाँ देखें" if (pdf_url and pdf_url.startswith("http")) else "🌐 आधिकारिक वेबसाइट पर जाएँ"
 
-    summary_block = ""
-    if en_points or hi_points:
-        summary_block = "━━━━━━━━━━━━━━━━━━━━━\n📌 <b>KEY HIGHLIGHTS / मुख्य बिंदु:</b>\n"
-        if en_points:
-            summary_block += "\n🇬🇧 <b>English:</b>\n"
-            for pt in en_points:
-                clean_pt = html.escape(str(pt).strip().lstrip("•- "))
-                summary_block += f"• {clean_pt}\n"
-        if hi_points:
-            summary_block += "\n🇮🇳 <b>हिंदी:</b>\n"
-            for pt in hi_points:
-                clean_pt = html.escape(str(pt).strip().lstrip("•- "))
-                summary_block += f"• {clean_pt}\n"
+    disclaimer_line = "⚠️ <i>यह सूचना समाचार रिपोर्टों पर आधारित है, कृपया आधिकारिक पोर्टल पर पुष्टि करें।</i>\n\n" if is_news_corroborated else ""
 
-    # Contextual dates content
-    has_dates = bool(apply_start or last_date or exam_date)
+    raw_message = f"""{meta['header']}
 
-    dates_content = ""
-    if is_central:
-        display_last = last_date or f"15 November {cur_year}"
-        dates_content = f"""━━━━━━━━━━━━━━━━━━━━━
-📅 <b>IMPORTANT DATES / महत्वपूर्ण तिथियां:</b>
-🔴 <b>छात्र आवेदन की अंतिम तिथि :</b> <b>⚡ {html.escape(display_last)} ⚡</b>
-🏫 <b>स्कूल / L1 वेरिफिकेशन      :</b> <b>30 November {cur_year}</b>
-🏛️ <b>जिला / L2 वेरिफिकेशन       :</b> <b>15 December {cur_year}</b>
-💰 <b>छात्रवृत्ति राशि              :</b> <b>₹12,000 प्रति वर्ष (DBT)</b>
-"""
-    elif category["type"] == "ANSWER_KEY":
-        display_last = last_date or "13 November 2026 (06:00 PM)"
-        display_exam = exam_date or "Held on 01 November 2026"
-        dates_content = f"""━━━━━━━━━━━━━━━━━━━━━
-📅 <b>IMPORTANT DATES / महत्वपूर्ण तिथियां:</b>
-🔴 <b>आपत्ति दर्ज करने की अंतिम तिथि :</b> <b>⚡ {html.escape(display_last)} ⚡</b>
-🟡 <b>परीक्षा की तिथि (Exam Date)  :</b> <b>{html.escape(display_exam)}</b>
-"""
-    elif category["type"] in ["APPLICATION_FORM", "DATE_EXTENSION", "EXAM_DATE"] or has_dates:
-        dates_content = f"""━━━━━━━━━━━━━━━━━━━━━
-📅 <b>IMPORTANT DATES:</b>
-🟢 <b>Start Date :</b> <b>{html.escape(apply_start or 'Active Now')}</b>
-🔴 <b>Last Date   :</b> <b>⚡ {html.escape(last_date or 'Check Circular')} ⚡</b>
-🟡 <b>Exam Date   :</b> <b>{html.escape(exam_date or 'To be notified')}</b>
-"""
-
-    message = f"""{category['badge']}
-
-📍 <b>State:</b> <b><u>{safe_state}</u></b>
-🏢 <b>Authority:</b> {safe_authority}
-📝 <b>Notice:</b> <b>{safe_title}</b>
-
-{summary_block}{dates_content}━━━━━━━━━━━━━━━━━━━━━
-👉 <a href="{target_link}"><b>{link_caption}</b></a>
+📍 <b>राज्य (State):</b> <b><u>{state_hi}</u></b>
+📋 <b>विषय:</b> <b>{safe_title}</b>
 
 ━━━━━━━━━━━━━━━━━━━━━
-🎓 <b>Sagar Coaching Centre, Bhagwanpur</b>
+ℹ️ <b>मुख्य विवरण (What Happened):</b>
+{safe_summary}
+
+{dates_section}━━━━━━━━━━━━━━━━━━━━━
+{disclaimer_line}👉 <a href="{safe_link}"><b>{link_text}</b></a>
+
+━━━━━━━━━━━━━━━━━━━━━
+🎓 <b>सागर कोचिंग सेंटर, भगवानपुर</b>
 ▶️ <b>YouTube:</b> <a href="https://www.youtube.com/@sagarcoachingcentrebhagwanpur">Sagar Coaching Centre Bhagwanpur</a>
 📞 <b>Call / WhatsApp:</b> +91 91101 13671
 """
-    return message
+    # Trim to 4000 characters
+    if len(raw_message) > 4000:
+        raw_message = raw_message[:3990] + "\n..."
+
+    return raw_message

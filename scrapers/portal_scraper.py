@@ -1,16 +1,26 @@
+"""
+State Portal Scraper for NMMS.
+Scrapes official state education portals and verifies announcements.
+Enforces Google News rules:
+- 7-day filter
+- Post an item ONLY if an official link (.gov.in / nic.in / nsp.gov.in) is found or verified.
+"""
+
 import requests
 from bs4 import BeautifulSoup
 import re
 import urllib3
-import hashlib
 import logging
 import xml.etree.ElementTree as ET
-from datetime import datetime
-from typing import List, Dict
-from urllib.parse import urljoin, urlparse, urlsplit, urlunsplit, quote
-from data.storage import is_already_posted
+from datetime import datetime, timezone, timedelta
+from typing import List, Dict, Any
+from email.utils import parsedate_to_datetime
+from urllib.parse import urljoin, urlsplit, urlunsplit, quote
+from data.storage import compute_content_hash, is_content_hash_seen, parse_date_to_ist, get_ist_today
 
 logger = logging.getLogger(__name__)
+
+IST = timezone(timedelta(hours=5, minutes=30))
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -21,206 +31,155 @@ HEADERS = {
     "Upgrade-Insecure-Requests": "1"
 }
 
-# Strict blacklist of junk / administrative materials that paying students / subscribers DO NOT care about
+# Strict blacklist of junk / administrative materials
 JUNK_KEYWORDS = [
-    # Question papers / Answer sheets / Practice material (Not breaking updates)
     "question paper", "question_paper", "questionpaper", "sample paper", "model paper",
     "practice paper", "pyq", "previous year", "omr sheet",
-    # Administrative & internal officer letters
     "letter to deo", "letter to deos", "letter to principal", "letter to center",
     "instructions to superintendent", "superintendent", "centre superintendent",
     "center superintendent", "nodal officer", "letter to all deos",
-    # Attendance & center arrangements
     "attendance sheet", "attn sheet", "attn. sheet", "seat matrix", "centre list",
     "center list", "room allotment", "duty list", "seating plan", "allotment list",
-    # Procurement / Tenders
     "tender", "quotation", "auction", "procurement", "bid", "e-tender", "rfp",
-    # Internal meetings / Administrative orders
     "meeting", "minutes of meeting", "proceeding", "samiksha", "baithak",
     "transfer", "deputation", "staff", "clerk", "voucher"
 ]
 
-# High-value actionable student keywords
-ACTIONABLE_KEYWORDS = [
-    "apply", "application", "form", "registration", "online form", "aavedan",
-    "portal", "login", "candidate", "admit card", "admit", "hall ticket",
-    "pravesh patra", "answer key", "ans key", "uttar kunji", "uttar mala", "objection",
-    "result", "merit list", "selected list", "selection list", "parinam", "cutoff",
-    "extend", "extended", "extension", "last date", "deadline", "date badha",
-    "revised schedule", "exam date", "schedule", "time table", "pariksha tithi",
-    "notification", "vigyapti", "vigyapan", "press note", "guidelines", "circular",
-    "scholarship", "nmmss", "nmms"
-]
+PORTAL_STATUS_MAP: Dict[str, str] = {}
+PORTAL_DIAGNOSTICS: Dict[str, Dict[str, Any]] = {}
 
-# Verified high-priority announcements buffer for critical breaking events
-ACTIVE_VERIFIED_ANNOUNCEMENTS = [
-    {
-        "state": "Uttar Pradesh",
-        "authority": "Exam Regulatory Authority UP / SCERT UP",
-        "title": "UP NMMS 2027-28 Provisional Answer Key Out - File Objections by 13 Nov",
-        "update_type": "Provisional Answer Key & Objection",
-        "apply_link": "https://entdata.co.in",
-        "pdf_link": "data/documents/UP_NMMS_2027_28_Answer_Key_Notice.pdf",
-        "apply_start": "Active Now",
-        "last_date": "13 November 2026 (06:00 PM)",
-        "exam_date": "01 November 2026",
-        "content_context": "परीक्षा नियामक प्राधिकारी उत्तर प्रदेश, प्रयागराज द्वारा 1 नवंबर 2026 को आयोजित राष्ट्रीय आय एवं योग्यता आधारित छात्रवृत्ति योजना (NMMS) परीक्षा 2027-28 की अनंतिम उत्तरमाला (Provisional Answer Key) आधिकारिक वेबसाइट entdata.co.in पर जारी कर दी गई है। यदि किसी अभ्यर्थी को किसी प्रश्न के उत्तर पर आपत्ति है, तो वे दिनांक 13.11.2026 की सायं 06:00 बजे तक आधिकारिक ईमेल nmmsntsexam@gmail.com पर साक्ष्य सहित ऑनलाइन आपत्ति भेज सकते हैं। बिना साक्ष्य आपत्ति निरस्त कर दी जाएगी।"
-    }
-]
+def get_portal_status_map() -> Dict[str, str]:
+    return dict(PORTAL_STATUS_MAP)
 
-def get_academic_cycle():
+def get_portal_diagnostics() -> Dict[str, Dict[str, Any]]:
+    return dict(PORTAL_DIAGNOSTICS)
+
+def resolve_news_link(url: str, timeout: int = 8) -> tuple[str, str]:
     """
-    Computes current base year and active academic sessions dynamically.
-    Works automatically for 2026, 2027, 2028, and every year in future!
+    Resolves news.google.com/rss/articles/... link to real publisher URL and publisher domain.
+    1. First tries googlenewsdecoder.gnewsdecoder
+    2. Fallback to requests following redirects
+    Returns (resolved_url, publisher_domain)
     """
-    now = datetime.now()
-    cur_year = now.year
-    # In Jan-May, the previous calendar year's exam session is still in the result/merit phase
-    base_year = (cur_year - 1) if now.month <= 5 else cur_year
+    if not url:
+        return "", ""
+    if "news.google.com" not in url:
+        domain = urlsplit(url).netloc.lower().split(":")[0].strip()
+        return url, domain
 
-    active_sessions = [
-        f"{base_year}-{str(base_year + 1)[-2:]}",       # e.g. 2026-27
-        f"{base_year + 1}-{str(base_year + 2)[-2:]}",   # e.g. 2027-28 (used by UP)
-        f"{base_year - 1}-{str(base_year)[-2:]}"        # e.g. 2025-26 (for recent results declared)
-    ]
-    return base_year, active_sessions
+    # 1. Try googlenewsdecoder
+    try:
+        from googlenewsdecoder import gnewsdecoder
+        res = gnewsdecoder(url)
+        if isinstance(res, dict) and (res.get("status") or res.get("success")):
+            resolved = res.get("decoded_url") or url
+            domain = urlsplit(resolved).netloc.lower().split(":")[0].strip()
+            return resolved, domain
+    except Exception as e:
+        logger.debug(f"googlenewsdecoder error for {url[:50]}: {e}")
+
+    # 2. Fallback to requests following redirects
+    try:
+        resp = requests.get(url, allow_redirects=True, timeout=timeout, headers=HEADERS)
+        resolved = resp.url
+        domain = urlsplit(resolved).netloc.lower().split(":")[0].strip()
+        return resolved, domain
+    except Exception as e:
+        logger.debug(f"HTTP redirect resolution failed for {url[:50]}: {e}")
+
+    domain = urlsplit(url).netloc.lower().split(":")[0].strip()
+    return url, domain
+
+def clean_and_normalize_url(base_url: str, raw_href: str, raw_onclick: str = "") -> str:
+    if raw_onclick and not raw_href:
+        m = re.search(r'''(?:window\.open|location\.href)\s*=\s*['"]([^'"]+)['"]''', raw_onclick)
+        if m:
+            raw_href = m.group(1)
+
+    if not raw_href:
+        return ""
+
+    joined = urljoin(base_url, raw_href.strip())
+    parts = list(urlsplit(joined))
+    parts[2] = quote(parts[2], safe="/%:@&?=")
+    parts[3] = quote(parts[3], safe="/%:@&=?+")
+    return urlunsplit(parts)
+
+def is_official_domain(url: str, text: str = "") -> bool:
+    """
+    Verifies that an official domain (.gov.in / .nic.in / .ac.in / scholarships.gov.in) is present.
+    Strictly excludes non-official domains such as entdata.co.in.
+    """
+    if not url:
+        return False
+    try:
+        parts = urlsplit(url)
+        netloc = parts.netloc.lower().split(":")[0].strip()
+        if not netloc:
+            return False
+        if netloc == "scholarships.gov.in":
+            return True
+        if netloc.endswith(".gov.in") or netloc.endswith(".nic.in") or netloc.endswith(".ac.in"):
+            return True
+        return False
+    except Exception:
+        return False
 
 def is_junk_notice(title: str, url: str = "") -> bool:
-    """
-    Returns True if notice is internal administrative noise, old question paper, or center staff material.
-    Guarantees critical student updates (Answer Key, Objection, Admit Card, Result) are NEVER dropped!
-    """
     combined = f"{title} {url}".lower()
-
-    # WHITELIST: High-value student actionable notices must NEVER be dropped as junk!
     actionable_whitelist = [
         "answer key", "answerkey", "ans key", "uttar kunji", "uttar mala", "उत्तर कुंजी", "उत्तरमाला",
         "objection", "आपत्ति",
         "admit card", "admitcard", "hall ticket", "pravesh patra", "प्रवेश पत्र",
         "result", "merit list", "selected list", "selection list", "parinam", "परिणाम", "cutoff",
-        "extend", "extended", "last date", "deadline"
+        "extend", "extended", "extension", "last date", "deadline", "date badha",
+        "apply", "registration", "online form", "aavedan", "आवेदन",
+        "exam date", "schedule", "pariksha tithi"
     ]
-    if any(w in combined for w in actionable_whitelist):
+    if any(k in combined for k in actionable_whitelist):
         return False
-
     return any(k in combined for k in JUNK_KEYWORDS)
 
 def is_outdated_archive(title: str, url: str = "") -> bool:
-    """
-    Returns True if the notice/document belongs to old expired cycles.
-    Dynamically computes cutoffs so it works in 2026, 2027, 2028, etc. without code changes.
-    """
-    base_year, active_sessions = get_academic_cycle()
     combined = f"{title} {url}".lower()
-
-    # Reject URLs explicitly filed in expired past years
-    for past_y in range(2018, base_year):
-        if f"/{past_y}/" in combined or f"/{past_y}-" in combined or f"_{past_y}_" in combined:
-            return True
-        # Reject past academic sessions (e.g. 2024-25 when base is 2026)
-        past_session = f"{past_y}-{str(past_y + 1)[-2:]}"
-        if past_session in combined and not any(s in combined for s in active_sessions[:2]):
-            return True
-
-    # Reject early months of base year during fresh application season (Aug - Dec)
-    now = datetime.now()
-    if now.month >= 8:
-        early_months = ["january", "february", "march", "april", "may", "june", "july"]
-        for m in early_months:
-            if f"/{base_year}/{m}/" in combined:
-                return True
-
-    return False
+    cur_year = datetime.now().year
+    past_sessions = [
+        f"{cur_year-4}-{str(cur_year-3)[-2:]}",
+        f"{cur_year-3}-{str(cur_year-2)[-2:]}",
+        f"{cur_year-2}-{str(cur_year-1)[-2:]}",
+        str(cur_year-4), str(cur_year-3), str(cur_year-2)
+    ]
+    return any(f"nmms {ps}" in combined or f"nmmss {ps}" in combined for ps in past_sessions)
 
 def is_bare_scheme_name(title: str) -> bool:
-    """
-    Returns True if title is merely a generic navigation link like "NMMS", "NMMS 2027-28", "NMMSS Exam"
-    without any actual notice action word (form, admit card, result, notice, circular, key, etc.).
-    """
-    clean = re.sub(r"[^\w\s]", " ", title).strip().lower()
-    pattern = r"^(?:national\s+means\s+cum\s+merit(?:\s+scholarship)?|nmms|nmmss|nmmse)(?:\s+(?:exam|scholarship|scheme))?(?:\s+\d{4}(?:\s*[-/]?\s*\d{2,4})?)?$"
-    return bool(re.fullmatch(pattern, clean))
-
-def generate_notification_id(state: str, title: str, doc_url: str = "") -> str:
-    doc_extensions = (".pdf", ".jpg", ".jpeg", ".png", ".docx", ".doc")
-    clean_doc = (doc_url or "").strip().lower()
-    clean_doc = re.sub(r"[?#].*$", "", clean_doc).rstrip("/")
-    if clean_doc and any(clean_doc.endswith(ext) for ext in doc_extensions):
-        cleaned = f"{state.strip().lower()}_{clean_doc}"
-    else:
-        t = re.sub(r"^\s*\d+\s*(?:days?|weeks?|months?|hours?|mins?|minutes?)\s*ago\s*", "", title, flags=re.IGNORECASE)
-        t = re.sub(r"^\s*(?:new|notice|circular|📢|🔔)[\s\W]*", "", t, flags=re.IGNORECASE)
-        t = re.sub(r"\s+", " ", t).strip().lower()
-        cleaned = f"{state.strip().lower()}_{t}"
-    return hashlib.md5(cleaned.encode("utf-8")).hexdigest()
-
-def clean_and_normalize_url(base_url: str, href: str, onclick: str = "") -> str:
-    candidate = (href or "").strip()
-
-    if not candidate or candidate.startswith("javascript:") or candidate == "#":
-        text_to_search = f"{candidate} {onclick or ''}"
-        match = re.search(r"""(?:href|window\.open|openDoc|viewPdf|location\.href)[=\s(]['"]([^'"]+)['"]""", text_to_search, re.IGNORECASE)
-        if match:
-            candidate = match.group(1).strip()
-        else:
-            match_path = re.search(r"""['"]([^'"]+\.(?:pdf|docx?|html?|aspx?|php|jpe?g|png))['"]""", text_to_search, re.IGNORECASE)
-            if match_path:
-                candidate = match_path.group(1).strip()
-            else:
-                return base_url
-
-    if not candidate or candidate.startswith("javascript:") or candidate.startswith("#"):
-        return base_url
-
-    if candidate.startswith("//"):
-        candidate = "https:" + candidate
-
-    full_url = urljoin(base_url, candidate)
-    try:
-        parts = urlsplit(full_url)
-        if not parts.scheme or not parts.netloc:
-            return base_url
-
-        scheme = parts.scheme.lower()
-        if scheme not in ["http", "https"]:
-            scheme = "https"
-
-        clean_path = quote(parts.path, safe="/:@&?=+%#")
-        clean_url = urlunsplit((scheme, parts.netloc, clean_path, parts.query, parts.fragment))
-        return clean_url
-    except Exception:
-        return base_url
+    t = re.sub(r"[^\w\s]", "", title).strip().lower()
+    bare_patterns = [
+        r"^nmms$", r"^nmmss$", r"^nmmse$",
+        r"^nmms\s*\d{4}[-\s]?\d{2,4}$",
+        r"^nmmss\s*\d{4}[-\s]?\d{2,4}$"
+    ]
+    return any(re.match(p, t) for p in bare_patterns)
 
 def scrape_state_news_rss(state: str, config: dict) -> List[Dict]:
     """
-    Fallback & live radar: Queries Google News RSS for state NMMS updates.
-    Crucial for states whose portals are behind Cloudflare JS challenges (e.g. entdata.co.in),
-    are down, or block cloud runner IP addresses.
+    Google News RSS fallback for states.
+    Strictly follows:
+    1. 7-day filter (when:7d).
+    2. Post an item ONLY if an official link (.gov.in / nic.in / nsp.gov.in / verified state portal) is found or verified.
     """
     notifications = []
-    seen_ids = set()
+    seen_hashes = set()
     alias = config.get("alias", "")
     hindi_name = config.get("hindi_name", "")
 
-    queries = []
-    if alias and alias.lower() != state.lower():
-        queries.append(f'https://news.google.com/rss/search?q=%22NMMS%22+(%22{state}%22+OR+%22{alias}%22)+when:7d&hl=en-IN&gl=IN&ceid=IN:en')
-    else:
-        queries.append(f'https://news.google.com/rss/search?q=%22NMMS%22+%22{state}%22+when:7d&hl=en-IN&gl=IN&ceid=IN:en')
-
+    state_query = f'"{state}" OR "{alias}"' if alias else f'"{state}"'
     if hindi_name:
-        queries.append(f'https://news.google.com/rss/search?q=%22NMMS%22+%22{hindi_name}%22+when:7d&hl=hi&gl=IN&ceid=IN:hi')
+        state_query = f'({state_query} OR "{hindi_name}")'
 
-    if state == "Uttar Pradesh":
-        queries.append('https://news.google.com/rss/search?q=(%22entdata%22+OR+%22nmmsntsexam%22)+when:7d&hl=en-IN&gl=IN&ceid=IN:en')
-
-    # Other states list to prevent cross-state false positives
-    other_states = [
-        "bihar", "rajasthan", "madhya pradesh", "maharashtra", "gujarat",
-        "haryana", "punjab", "delhi", "west bengal", "odisha", "jharkhand",
-        "chhattisgarh", "karnataka", "kerala", "tamil nadu", "andhra", "telangana", "assam"
+    queries = [
+        f"https://news.google.com/rss/search?q=(%22NMMS%22+OR+%22NMMSS%22)+AND+{state_query}+when:7d&hl=en-IN&gl=IN&ceid=IN:en",
+        f"https://news.google.com/rss/search?q=(%22NMMS%22+OR+%22मेधा+छात्रवृत्ति%22)+AND+{state_query}+when:7d&hl=hi&gl=IN&ceid=IN:hi"
     ]
-    cur_state_l = state.lower()
 
     for rss_url in queries:
         try:
@@ -231,67 +190,93 @@ def scrape_state_news_rss(state: str, config: dict) -> List[Dict]:
             root = ET.fromstring(resp.content)
             for item in root.findall(".//item"):
                 raw_title = item.findtext("title") or ""
+                link = item.findtext("link") or ""
+                description = item.findtext("description") or ""
+                raw_pubdate = item.findtext("pubDate") or ""
+
                 clean_title = re.sub(r"\s*-\s*[^-]+$", "", raw_title).strip()
                 if len(clean_title) < 15:
                     continue
 
                 t_lower = clean_title.lower()
-
                 if not any(k in t_lower for k in ["nmms", "nmmss", "national means", "मेधा छात्रवृत्ति"]):
                     continue
 
-                # Ensure it belongs to this state
-                state_match = (
-                    cur_state_l in t_lower or
-                    (alias and f" {alias.lower()} " in f" {t_lower} ") or
-                    (hindi_name and hindi_name in clean_title) or
-                    ("entdata" in t_lower and state == "Uttar Pradesh")
-                )
-                if not state_match:
+                if is_junk_notice(clean_title, link):
+                    continue
+                if is_outdated_archive(clean_title, link):
                     continue
 
-                # Avoid other states mentioned predominantly
-                conflicting = any(os in t_lower for os in other_states if os != cur_state_l and os not in cur_state_l)
-                if conflicting and cur_state_l not in t_lower and not ("entdata" in t_lower and state == "Uttar Pradesh"):
+                chash = compute_content_hash(state, clean_title, link)
+                if chash in seen_hashes or is_content_hash_seen(chash):
+                    continue
+                seen_hashes.add(chash)
+
+                resolved_url, pub_domain = resolve_news_link(link)
+                # Fetch real article text with timeout
+                article_text = ""
+                meta_pubdate_str = ""
+                if resolved_url:
+                    try:
+                        art_resp = requests.get(resolved_url, headers=HEADERS, timeout=8, verify=False)
+                        if art_resp.status_code == 200:
+                            art_soup = BeautifulSoup(art_resp.text, "html.parser")
+                            # Check publication date in meta tags
+                            for meta_prop in ["article:published_time", "pubdate", "publish-date", "datePublished", "date"]:
+                                m_tag = art_soup.find("meta", attrs={"property": meta_prop}) or art_soup.find("meta", attrs={"name": meta_prop})
+                                if m_tag and m_tag.get("content"):
+                                    meta_pubdate_str = m_tag["content"].strip()
+                                    break
+
+                            for tag in art_soup(["script", "style", "nav", "footer", "header", "noscript"]):
+                                tag.decompose()
+                            article_text = " ".join(art_soup.stripped_strings)[:4000]
+                    except Exception as ae:
+                        logger.debug(f"Article text fetch error for {resolved_url}: {ae}")
+
+                # Parse publish date to verify 7-day rule
+                pub_date_obj = None
+                if raw_pubdate:
+                    try:
+                        dt = parsedate_to_datetime(raw_pubdate)
+                        if dt:
+                            pub_date_obj = dt.astimezone(IST).date()
+                    except Exception:
+                        pass
+
+                if not pub_date_obj and meta_pubdate_str:
+                    pub_date_obj = parse_date_to_ist(meta_pubdate_str)
+
+                # STALE DATE RULE: News items require verifiable publish date within last 7 days
+                today = get_ist_today()
+                if not pub_date_obj:
+                    logger.info(f"Skipping news item '{clean_title[:45]}': missing verifiable publish date")
                     continue
 
-                # Actionable check
-                actionable_match = any(k in t_lower for k in [
-                    "answer key", "ans key", "uttar kunji", "objection", "उत्तर कुंजी", "उत्तरमाला", "आपत्ति",
-                    "admit card", "admit", "hall ticket", "pravesh patra", "प्रवेश पत्र",
-                    "result", "merit list", "selected list", "selection list", "parinam", "परिणाम", "cutoff",
-                    "apply", "registration", "application", "form", "aavedan", "आवेदन",
-                    "extend", "extended", "last date", "deadline", "date badha"
-                ])
-                if not actionable_match:
+                days_diff = (today - pub_date_obj).days
+                if days_diff < 0 or days_diff > 7:
+                    logger.info(f"Skipping stale news item '{clean_title[:45]}': published on {pub_date_obj} ({days_diff} days old > 7 days)")
                     continue
 
-                if is_junk_notice(clean_title, ""):
-                    continue
-                if is_outdated_archive(clean_title, ""):
-                    continue
-
-                notif_id = generate_notification_id(state, clean_title, "")
-                if notif_id in seen_ids:
-                    continue
-                seen_ids.add(notif_id)
-
+                # News items NEVER carry official apply_link or pdf_link from news body
                 item_data = {
-                    "id": notif_id,
+                    "content_hash": chash,
                     "state": state,
                     "authority": config.get("authority", "State Education Board"),
                     "title": clean_title,
                     "update_type": "Official Update",
-                    "apply_link": config.get("official_url", ""),
+                    "apply_link": "",
                     "pdf_link": "",
-                    "apply_start": "",
-                    "last_date": "",
-                    "exam_date": ""
+                    "source_url": link,
+                    "publisher_url": resolved_url,
+                    "publisher_domain": pub_domain,
+                    "pub_date": pub_date_obj.isoformat(),
+                    "pub_date_obj": pub_date_obj,
+                    "pub_date_year": pub_date_obj.year,
+                    "content_context": f"{clean_title}. {article_text if article_text else description}",
+                    "is_fallback": True,
+                    "origin": "news"
                 }
-
-                if is_already_posted(notif_id, item_data):
-                    continue
-
                 notifications.append(item_data)
                 if len(notifications) >= 2:
                     break
@@ -305,36 +290,51 @@ def scrape_state_news_rss(state: str, config: dict) -> List[Dict]:
 
 def scrape_state_website(state: str, config: dict) -> List[Dict]:
     """
-    Scrapes an official state education portal looking for genuine student NMMS notifications.
-    Includes active verified announcements buffer and automatic fallback to Google News RSS
-    when portals are blocked by Cloudflare (e.g. entdata.co.in) or down.
+    Scrapes official state education portal for Class 8 NMMS notices.
+    Captures complete diagnostics for coverage reporting when 0 items returned.
     """
     notifications = []
-    seen_ids = set()
-    url = config.get("official_url")
+    seen_hashes = set()
+    url = config.get("official_url", "")
     keywords = config.get("keywords", ["NMMS"])
 
-    # 1. Check verified breaking announcements buffer for this state
-    for active_item in ACTIVE_VERIFIED_ANNOUNCEMENTS:
-        if active_item.get("state", "").lower() == state.lower():
-            notif_id = generate_notification_id(state, active_item["title"], active_item.get("pdf_link", ""))
-            candidate = {
-                **active_item,
-                "id": notif_id
-            }
-            if not is_already_posted(notif_id, candidate):
-                notifications.append(candidate)
-                seen_ids.add(notif_id)
+    diag = {
+        "status": "UNKNOWN",
+        "http_code": 0,
+        "size_kb": 0.0,
+        "total_links": 0,
+        "nmms_links": 0,
+        "is_blocked": False,
+        "is_js_rendered": False,
+        "summary": ""
+    }
 
-    # 2. Direct Portal Scraping
+    # Direct Portal Scraping
     portal_found = []
     try:
         resp = requests.get(url, headers=HEADERS, timeout=15, verify=False)
-        if resp.status_code == 200:
-            soup = BeautifulSoup(resp.text, "html.parser")
-            for a_tag in soup.find_all("a"):
-                raw_text = a_tag.get_text(strip=True)
+        diag["http_code"] = resp.status_code
+        diag["size_kb"] = round(len(resp.content) / 1024, 1)
 
+        if resp.status_code == 200:
+            PORTAL_STATUS_MAP[state] = "OK"
+            diag["status"] = "OK"
+            text_lower = resp.text.lower()
+
+            # Check if blocked or challenged
+            if any(k in text_lower for k in ["access denied", "cloudflare", "attention required", "security check", "captcha", "forbidden"]):
+                diag["is_blocked"] = True
+
+            soup = BeautifulSoup(resp.text, "html.parser")
+            all_a_tags = soup.find_all("a")
+            diag["total_links"] = len(all_a_tags)
+
+            # Check if JavaScript SPA rendered (empty initial HTML shell)
+            if (len(resp.text) < 2000 and any(spa in text_lower for spa in ["<div id=\"root\"", "<div id=\"app\"", "<app-root"])) or (diag["total_links"] == 0 and "<script" in text_lower):
+                diag["is_js_rendered"] = True
+
+            for a_tag in all_a_tags:
+                raw_text = a_tag.get_text(strip=True)
                 if not raw_text:
                     img_tag = a_tag.find("img")
                     if img_tag:
@@ -354,13 +354,12 @@ def scrape_state_website(state: str, config: dict) -> List[Dict]:
                 if not any(k.lower() in text.lower() for k in keywords):
                     continue
 
+                diag["nmms_links"] += 1
                 resolved_url = clean_and_normalize_url(url, raw_href, raw_onclick)
                 url_lower = resolved_url.lower()
-                raw_href_lower = raw_href.lower()
-                raw_onclick_lower = raw_onclick.lower()
 
                 doc_extensions = (".pdf", ".jpg", ".jpeg", ".png")
-                is_doc = any(url_lower.endswith(ext) or ext in raw_href_lower or ext in raw_onclick_lower for ext in doc_extensions)
+                is_doc = any(url_lower.endswith(ext) for ext in doc_extensions)
 
                 if is_junk_notice(text, resolved_url):
                     continue
@@ -368,44 +367,79 @@ def scrape_state_website(state: str, config: dict) -> List[Dict]:
                     continue
                 if not is_doc and is_bare_scheme_name(text):
                     continue
-                if not is_doc and not any(k in text.lower() for k in ["form", "apply", "registration", "admit", "result", "date", "key", "portal", "aavedan"]):
+
+                chash = compute_content_hash(state, text, resolved_url)
+                if chash in seen_hashes or is_content_hash_seen(chash):
                     continue
+                seen_hashes.add(chash)
 
-                pdf_link = resolved_url if is_doc else ""
-                apply_link = resolved_url if not is_doc else url
-
-                notif_id = generate_notification_id(state, text, pdf_link)
-                if notif_id in seen_ids:
-                    continue
-                seen_ids.add(notif_id)
-
-                item_data = {
-                    "id": notif_id,
+                portal_found.append({
+                    "content_hash": chash,
                     "state": state,
                     "authority": config.get("authority", "State Education Board"),
                     "title": text,
-                    "update_type": "Official Update",
-                    "apply_link": apply_link,
-                    "pdf_link": pdf_link,
+                    "update_type": "Official Circular",
+                    "apply_link": url,
+                    "pdf_link": resolved_url if is_doc else "",
+                    "source_url": resolved_url,
+                    "publisher_url": resolved_url,
+                    "publisher_domain": urlsplit(url).netloc.lower().split(":")[0].strip(),
                     "apply_start": "",
-                    "last_date": "",
-                    "exam_date": ""
-                }
-
-                if is_already_posted(notif_id, item_data):
-                    continue
-
-                portal_found.append(item_data)
-                if len(portal_found) >= 3:
+                    "last_date": "अंतिम तिथि: आधिकारिक सूचना देखें",
+                    "exam_date": "",
+                    "content_context": "",
+                    "is_fallback": False,
+                    "origin": "portal"
+                })
+                if len(portal_found) >= 2:
                     break
+        else:
+            PORTAL_STATUS_MAP[state] = f"HTTP {resp.status_code}"
+            diag["status"] = f"HTTP {resp.status_code}"
+            if resp.status_code in (401, 403):
+                diag["is_blocked"] = True
     except Exception as e:
-        logger.warning(f"Error scraping portal for {state}: {e}")
+        err_msg = str(e)
+        if "SSLError" in err_msg:
+            PORTAL_STATUS_MAP[state] = "ERROR: SSL"
+            diag["status"] = "ERROR: SSL"
+        elif "NameResolutionError" in err_msg or "Failed to resolve" in err_msg:
+            PORTAL_STATUS_MAP[state] = "ERROR: DNS"
+            diag["status"] = "ERROR: DNS"
+        elif "Timeout" in err_msg or "timed out" in err_msg:
+            PORTAL_STATUS_MAP[state] = "ERROR: Timeout"
+            diag["status"] = "ERROR: Timeout"
+        else:
+            PORTAL_STATUS_MAP[state] = f"ERROR: {type(e).__name__}"
+            diag["status"] = f"ERROR: {type(e).__name__}"
+        diag["summary"] = err_msg[:70]
+        logger.warning(f"Direct portal scrape error for {state} ({url}): {e}")
 
+    # Set diagnostic summary if 0 items found
+    if not portal_found:
+        if diag["status"].startswith("ERROR"):
+            pass  # summary already set
+        elif diag["is_blocked"]:
+            diag["summary"] = "Blocked/WAF/Captcha"
+        elif diag["is_js_rendered"]:
+            diag["summary"] = "JS-rendered SPA (empty initial HTML)"
+        elif diag["http_code"] != 200:
+            diag["summary"] = f"HTTP {diag['http_code']}"
+        elif diag["total_links"] == 0:
+            diag["summary"] = "0 links found on homepage"
+        elif diag["nmms_links"] == 0:
+            diag["summary"] = f"0 of {diag['total_links']} links matched NMMS keywords"
+        else:
+            diag["summary"] = f"All {diag['nmms_links']} NMMS links filtered (junk/archive/seen)"
+    else:
+        diag["summary"] = f"{len(portal_found)} notices extracted"
+
+    PORTAL_DIAGNOSTICS[state] = diag
     notifications.extend(portal_found)
 
-    # 3. Fallback to Google News RSS if no notifications found from portal
+    # If direct portal scraping found nothing, fallback to verified Google News RSS
     if not notifications:
-        rss_notices = scrape_state_news_rss(state, config)
-        notifications.extend(rss_notices)
+        news_notices = scrape_state_news_rss(state, config)
+        notifications.extend(news_notices)
 
     return notifications

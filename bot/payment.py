@@ -24,7 +24,7 @@ def create_payment_link(user_id: int, user_name: str = "Student") -> str:
         raise Exception("Razorpay is not configured")
 
     # Generate fresh 1-time channel invite link for this paying student
-    invite_link = create_single_use_invite_link() or f"https://t.me/+HygnvMiBpgVkMmE9"
+    invite_link = create_single_use_invite_link() or "https://t.me/+HygnvMiBpgVkMmE9"
 
     payload = {
         "amount": FEE_INR * 100,  # in paise

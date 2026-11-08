@@ -13,3 +13,12 @@ env/
 
 # Database local testing files
 database/notifications.db-journal
+
+# Logs and outputs
+*.log
+output.txt
+task-*.log
+
+# Self-generated test documents and backups
+data/documents/*.pdf
+backup*/

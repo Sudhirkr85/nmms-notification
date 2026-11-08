@@ -91,7 +91,7 @@ def polling_worker():
                     offset = update["update_id"] + 1
                     if "message" in update:
                         handle_user_command(update["message"])
-        except Exception as e:
+        except Exception:
             time.sleep(2)
 
 class HealthHandler(BaseHTTPRequestHandler):
