@@ -5,3 +5,4 @@ urllib3>=2.0.0
 razorpay>=1.4.0
 groq>=0.11.0
 pypdf>=4.0.0
+reportlab>=4.0.0

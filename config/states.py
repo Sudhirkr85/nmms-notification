@@ -1,5 +1,6 @@
 """
 Official state-wise SCERT / Education Department URLs, aliases, and Hindi names for NMMS
+Excludes South Indian non-Hindi regions (Karnataka, Kerala, Tamil Nadu, Andhra Pradesh, Telangana)
 """
 
 STATE_CONFIG = {
@@ -66,20 +67,6 @@ STATE_CONFIG = {
         "hindi_name": "दिल्ली",
         "keywords": ["NMMS", "NMMSS", "National Means", "राष्ट्रीय आय"]
     },
-    "West Bengal": {
-        "authority": "Directorate of School Education WB",
-        "official_url": "https://scholarships.wbsed.gov.in",
-        "alias": "WB",
-        "hindi_name": "पश्चिम बंगाल",
-        "keywords": ["NMMS", "NMMSS", "NMMSE", "National Means"]
-    },
-    "Odisha": {
-        "authority": "SCERT Odisha / BSE Odisha",
-        "official_url": "https://scertodisha.nic.in",
-        "alias": "Odisha",
-        "hindi_name": "ओडिशा",
-        "keywords": ["NMMS", "NMMSS", "National Means"]
-    },
     "Jharkhand": {
         "authority": "JAC Jharkhand",
         "official_url": "https://jac.jharkhand.gov.in",
@@ -93,48 +80,6 @@ STATE_CONFIG = {
         "alias": "CG",
         "hindi_name": "छत्तीसगढ़",
         "keywords": ["NMMS", "NMMSS", "National Means", "राष्ट्रीय आय"]
-    },
-    "Karnataka": {
-        "authority": "KSEAB / DSERT Karnataka",
-        "official_url": "https://kseab.karnataka.gov.in",
-        "alias": "Karnataka",
-        "hindi_name": "कर्नाटक",
-        "keywords": ["NMMS", "NMMSS", "National Means"]
-    },
-    "Kerala": {
-        "authority": "SCERT Kerala / Pareeksha Bhavan",
-        "official_url": "https://nmmse.kerala.gov.in",
-        "alias": "Kerala",
-        "hindi_name": "केरल",
-        "keywords": ["NMMS", "NMMSS", "NMMSE", "National Means"]
-    },
-    "Tamil Nadu": {
-        "authority": "DGE Tamil Nadu",
-        "official_url": "https://dge.tn.gov.in",
-        "alias": "TN",
-        "hindi_name": "तमिलनाडु",
-        "keywords": ["NMMS", "NMMSS", "National Means"]
-    },
-    "Andhra Pradesh": {
-        "authority": "BSE Andhra Pradesh",
-        "official_url": "https://bse.ap.gov.in",
-        "alias": "AP",
-        "hindi_name": "आंध्र प्रदेश",
-        "keywords": ["NMMS", "NMMSS", "National Means"]
-    },
-    "Telangana": {
-        "authority": "BSE Telangana",
-        "official_url": "https://bse.telangana.gov.in",
-        "alias": "TS",
-        "hindi_name": "तेलंगाना",
-        "keywords": ["NMMS", "NMMSS", "National Means"]
-    },
-    "Assam": {
-        "authority": "DTE Assam / Madhyamik Assam",
-        "official_url": "https://madhyamik.assam.gov.in",
-        "alias": "Assam",
-        "hindi_name": "असम",
-        "keywords": ["NMMS", "NMMSS", "National Means"]
     },
     "Himachal Pradesh": {
         "authority": "SCERT HP",

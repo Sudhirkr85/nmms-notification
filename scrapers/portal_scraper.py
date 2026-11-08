@@ -60,7 +60,7 @@ ACTIVE_VERIFIED_ANNOUNCEMENTS = [
         "title": "UP NMMS 2027-28 Provisional Answer Key Out - File Objections by 13 Nov",
         "update_type": "Provisional Answer Key & Objection",
         "apply_link": "https://entdata.co.in",
-        "pdf_link": "",
+        "pdf_link": "data/documents/UP_NMMS_2027_28_Answer_Key_Notice.pdf",
         "apply_start": "Active Now",
         "last_date": "13 November 2026 (06:00 PM)",
         "exam_date": "01 November 2026",

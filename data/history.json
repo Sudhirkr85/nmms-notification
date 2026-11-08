@@ -6,8 +6,9 @@
       "apply_link": "https://2027.mscenmms.in/",
       "pdf_link": "",
       "last_date": "",
-      "message_id": 100,
-      "posted_at": "2026-11-03T03:24:50.852463"
+      "message_id": null,
+      "posted_at": "2026-11-03T03:24:50.852463",
+      "purged_from_channel": true
     },
     "79d79c31f5f7f009fb92725ee685fd63": {
       "state": "Gujarat",
@@ -15,8 +16,9 @@
       "apply_link": "https://sebexam.org",
       "pdf_link": "https://sebexam.org/AdvertiseFiles/2026/nmms%20exam-2026-27%20date%20extend-_102026.pdf",
       "last_date": "",
-      "message_id": 102,
-      "posted_at": "2026-11-03T03:25:55.104513"
+      "message_id": null,
+      "posted_at": "2026-11-03T03:25:55.104513",
+      "purged_from_channel": true
     },
     "d8a9bf643b89b777eee86c3e63f85c29": {
       "state": "Gujarat",
@@ -24,8 +26,9 @@
       "apply_link": "https://sebexam.org",
       "pdf_link": "https://sebexam.org/AdvertiseFiles/2026/nmms%20exam-2025-26%20result%20notification_022026.pdf",
       "last_date": "",
-      "message_id": 103,
-      "posted_at": "2026-11-03T03:26:20.774265"
+      "message_id": null,
+      "posted_at": "2026-11-03T03:26:20.774265",
+      "purged_from_channel": true
     },
     "69510bd6e2574589af84812572171237": {
       "state": "Tamil Nadu",
@@ -33,8 +36,9 @@
       "apply_link": "https://apply1.tndge.org/dge-notification/NMMS",
       "pdf_link": "",
       "last_date": "",
-      "message_id": 106,
-      "posted_at": "2026-11-03T03:28:07.044748"
+      "message_id": null,
+      "posted_at": "2026-11-03T03:28:07.044748",
+      "purged_from_channel": true
     },
     "74e405679964d0014fda4ce57a12b650": {
       "state": "Central (NSP)",

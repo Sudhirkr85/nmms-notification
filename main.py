@@ -160,7 +160,7 @@ def process_and_post_notice(notice: dict) -> int:
         logger.info(f"   -> [POSTED SUCCESS] Message ID {msg_id} sent for {state}: '{final_title}'")
 
         # Exclusive Paid Group Feature: Attach the actual official PDF document file right in Telegram
-        if pdf_url and pdf_url.startswith("http"):
+        if pdf_url and (pdf_url.startswith("http") or os.path.exists(pdf_url)):
             doc_caption = f"📄 <b>Official Circular PDF:</b> <i>{final_title}</i> ({state})"
             send_telegram_document(pdf_url, caption=doc_caption)
 
