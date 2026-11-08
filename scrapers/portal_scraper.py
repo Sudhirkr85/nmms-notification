@@ -54,7 +54,7 @@ def get_portal_status_map() -> Dict[str, str]:
 def get_portal_diagnostics() -> Dict[str, Dict[str, Any]]:
     return dict(PORTAL_DIAGNOSTICS)
 
-def fetch_rendered_html_with_playwright(url: str, wait_seconds: int = 6) -> tuple[str, str, List[Dict[str, str]]]:
+def fetch_rendered_html_with_playwright(url: str, wait_seconds: int = 8) -> tuple[str, str, List[Dict[str, str]]]:
     """
     Renders JavaScript-heavy or Cloudflare-protected page using Playwright Chromium in stealth mode.
     Returns (html_content, page_title, links_list).
@@ -63,16 +63,35 @@ def fetch_rendered_html_with_playwright(url: str, wait_seconds: int = 6) -> tupl
         from playwright.sync_api import sync_playwright
         import time
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True, args=['--disable-blink-features=AutomationControlled'])
+            browser = p.chromium.launch(
+                headless=True,
+                args=[
+                    '--disable-blink-features=AutomationControlled',
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-dev-shm-usage'
+                ]
+            )
             context = browser.new_context(
-                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                viewport={'width': 1280, 'height': 800}
             )
             page = context.new_page()
             page.add_init_script('delete Object.getPrototypeOf(navigator).webdriver')
-            page.goto(url, timeout=30000)
+            page.goto(url, timeout=35000, wait_until='domcontentloaded')
             time.sleep(wait_seconds)
-            html = page.content()
+
             title = page.title()
+            # If Cloudflare challenge page ("Just a moment..."), wait for challenge solving
+            if "just a moment" in title.lower():
+                logger.info(f"Cloudflare challenge detected on {url}. Waiting for verification to complete...")
+                for _ in range(6):
+                    time.sleep(2)
+                    title = page.title()
+                    if "just a moment" not in title.lower():
+                        break
+
+            html = page.content()
             extracted_links = []
             for a in page.query_selector_all('a'):
                 href = a.get_attribute('href') or ""
@@ -84,7 +103,7 @@ def fetch_rendered_html_with_playwright(url: str, wait_seconds: int = 6) -> tupl
             browser.close()
             return html, title, extracted_links
     except Exception as e:
-        logger.debug(f"Playwright rendering failed for {url}: {e}")
+        logger.warning(f"Playwright rendering failed for {url}: {e}")
         return "", "", []
 
 def resolve_news_link(url: str, timeout: int = 8) -> tuple[str, str]:
