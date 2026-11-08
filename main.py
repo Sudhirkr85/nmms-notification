@@ -138,11 +138,13 @@ def process_and_post_notice(notice: dict) -> int:
     )
 
     if msg_id:
-        ai_summary_point = ""
-        if ai_data.get("highlights_hi"):
-            ai_summary_point = str(ai_data["highlights_hi"][0]).strip()
-        elif ai_data.get("clean_title"):
-            ai_summary_point = str(ai_data["clean_title"]).strip()
+        # Save comprehensive factual summary in history so subsequent AI duplicate checks have full context
+        summary_points = []
+        for h in ai_data.get("highlights_hi", []):
+            summary_points.append(str(h).strip())
+        for h in ai_data.get("highlights_en", []):
+            summary_points.append(str(h).strip())
+        ai_summary_point = " | ".join(summary_points) or ai_data.get("clean_title") or notice["title"]
 
         record_posted(
             notification_id=notif_id,

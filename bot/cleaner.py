@@ -6,7 +6,7 @@ from bot.telegram_poster import delete_telegram_message
 logger = logging.getLogger(__name__)
 
 # Identified bad / duplicate / outdated / junk message IDs sent to Telegram
-PURGE_MESSAGE_IDS = [94, 95, 96, 97, 98, 99, 101, 104, 105, 107, 108, 109, 110, 111]
+PURGE_MESSAGE_IDS = [94, 95, 96, 97, 98, 99, 101, 104, 105, 107, 108, 109, 110, 111, 112]
 
 def purge_bad_messages(data_file_path: str):
     """

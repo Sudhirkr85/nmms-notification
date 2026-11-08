@@ -133,11 +133,16 @@ def analyze_notice_with_groq(state: str, title: str, notice_url: str = "", recen
     headline_date = extract_date_from_headline(title)
     cur_year = datetime.now().year
 
-    recent_posts_summary = "None yet."
+    recent_posts_summary = "No previous announcements recorded for this state yet."
     if recent_posts:
         items = []
         for idx, p in enumerate(recent_posts, 1):
-            items.append(f"[{idx}] Title: '{p.get('title')}' | Last Date: {p.get('last_date', 'N/A')}")
+            items.append(
+                f"[{idx}] Title: '{p.get('title')}'\n"
+                f"    Category: {p.get('category', 'N/A')}\n"
+                f"    AI Summary: {p.get('ai_summary', 'N/A')}\n"
+                f"    Announced Deadline: {p.get('last_date', 'N/A')}"
+            )
         recent_posts_summary = "\n".join(items)
 
     extracted_text = raw_text.strip() if raw_text else ""
@@ -167,25 +172,35 @@ CANDIDATE NOTICE DOCUMENT/PAGE CONTENT:
 RECENT ANNOUNCEMENTS ALREADY POSTED IN TELEGRAM FOR THIS STATE:
 {recent_posts_summary}"""
 
-    system_prompt = f"""You are the Chief Editor and Quality Gatekeeper for a premium paid NMMS Scholarship channel for Class 8 students & parents. Current year is {cur_year}.
+    today_str = datetime.now().strftime("%d %B %Y")
+    system_prompt = f"""You are the Chief Quality Gatekeeper and Semantic Deduplicator for a premium paid NMMS Scholarship Telegram channel for Class 8 students & parents.
+Today's Date: {today_str}. Active Academic Cycle: Session {cur_year}-{str(cur_year+1)[-2:]} / {cur_year+1}-{str(cur_year+2)[-2:]}.
 
-Subscribers pay for ACCURACY, FRESHNESS, and REAL NOTICE-SPECIFIC FACTS.
+Your primary mission is to:
+1. PREVENT DUPLICATES (Never re-announce an event, deadline, or update that has already been covered).
+2. PREVENT STALE / EXPIRED POSTS (Never announce a deadline that is in the past relative to today's date: {today_str}).
+3. PREVENT UNRELATED SCHEMES (Channel is exclusively for Class 8 NMMS / NMMSS / National Means-cum-Merit Scholarship. Reject PM YASASVI, CSSS, NTSE, Post-Matric, etc.).
 
 EVALUATE AND ACT:
 1. is_student_actionable (boolean):
-   - TRUE only if this notice contains genuine student-facing action: Application Form Live, Deadline Extended, Admit Card Out, Exam Schedule Announced, Answer Key Out, Result Declared.
-   - FALSE if it is:
-     * Internal departmental/officer order (Letter to DEOs, District Education Officers, Principals, Nodal officers, Superintendent instructions)
-     * Center logistics (Attendance sheets, Attn sheets, Seat matrix, Room allotment, Invigilator duty lists)
-     * Practice/Question papers (Sample papers, model question papers, previous year question papers)
-     * Administrative/commercial (Tenders, quotations, auction, meeting minutes)
-     * Outdated/archived notices from past years or expired sessions
-     * Bare portal menu buttons (e.g. "NMMS 2027-28" with no real circular text)
+   - MUST be strictly for NMMS (National Means-cum-Merit Scholarship / NMMSS / राष्ट्रीय आय एवं योग्यता आधारित छात्रवृत्ति) for Class 8 students.
+   - Return FALSE if:
+     * Scheme Mismatch: Notice is for PM-YASASVI, CSSS, Post-Matric, NTSE, Pre-Matric SC/ST, Begum Hazrat Mahal, or general scholarships instead of NMMS.
+     * Expired Deadline: Any deadline date announced in the notice is in the past (before {today_str}).
+     * Internal departmental/officer order (Letter to DEOs, District Education Officers, Principals, Nodal officers, Superintendent instructions).
+     * Center logistics (Attendance sheets, Attn sheets, Seat matrix, Room allotment, Invigilator duty lists).
+     * Practice/Question papers (Sample papers, model question papers, previous year question papers).
+     * Administrative/commercial (Tenders, quotations, auction, meeting minutes).
+     * Outdated/archived notices from past years or expired sessions.
+     * Bare portal menu buttons (e.g. "NMMS 2027-28" with no real circular text).
 
 2. is_semantic_duplicate (boolean):
-   - Check against RECENT ANNOUNCEMENTS ALREADY POSTED.
-   - If this candidate notice reports the SAME event, same deadline extension, or same announcement already covered (even if rephrased by different media outlets), return TRUE.
-   - Otherwise FALSE.
+   - CAREFULLY COMPARE this candidate notice against the "RECENT ANNOUNCEMENTS ALREADY POSTED IN TELEGRAM" history below.
+   - Match by MEANING and FACTS, not just exact words:
+     * If history already has a post announcing the SAME deadline extension (e.g. history already announced deadline 15 Nov, and candidate also reports deadline 15 Nov), return TRUE (Duplicate).
+     * If history already announced the same Answer Key, same Result, or same Admit Card release, return TRUE (Duplicate).
+     * If media outlets rephrased the same event or press release under different headlines, return TRUE (Duplicate).
+   - ONLY return FALSE (Allow) if this candidate notice brings a GENUINE NEW EVENT (e.g. an earlier post had deadline 15 Nov, but this notice announces a new government order extending it to 30 Nov; or this is an Answer Key release when only the exam was previously posted)."""
 
 3. STRICT RULE FOR HIGHLIGHTS (NO GENERIC COPY-PASTE):
    - Do NOT output generic boilerplate slogans like "Students receive Rs 12,000/yr" or generic advice.

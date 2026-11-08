@@ -54,8 +54,9 @@
       "apply_link": "https://scholarships.gov.in",
       "pdf_link": "",
       "last_date": "2026-10-31",
-      "message_id": 112,
-      "posted_at": "2026-11-04T02:27:14.633466"
+      "message_id": null,
+      "posted_at": "2026-11-04T02:27:14.633466",
+      "purged_from_channel": true
     }
   },
   "reminders_sent": {}

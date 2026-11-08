@@ -245,7 +245,14 @@ def get_recent_notices_for_state(state: str, limit: int = 5) -> List[Dict]:
     state_clean = state.strip().lower()
     matches = []
     for k, v in posted.items():
-        if (v.get("state") or "").strip().lower() == state_clean:
+        v_state = (v.get("state") or "").strip().lower()
+        is_match = False
+        if "central" in state_clean or "nsp" in state_clean:
+            is_match = ("central" in v_state or "nsp" in v_state)
+        else:
+            is_match = (v_state == state_clean)
+
+        if is_match:
             matches.append({
                 "title": v.get("title", ""),
                 "ai_summary": v.get("ai_summary", "") or v.get("title", ""),
