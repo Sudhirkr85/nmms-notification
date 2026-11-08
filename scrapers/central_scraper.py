@@ -67,8 +67,8 @@ def scrape_central_nsp() -> List[Dict]:
 
     # 1. Official Press Releases via verified government PIB search
     rss_queries = [
-        "https://news.google.com/rss/search?q=%22NMMSS%22+site:pib.gov.in&hl=en-IN&gl=IN&ceid=IN:en",
-        "https://news.google.com/rss/search?q=%22NMMSS%22+OR+%22National+Means-cum-Merit%22&hl=en-IN&gl=IN&ceid=IN:en"
+        "https://news.google.com/rss/search?q=%22NMMSS%22+site:pib.gov.in+when:7d&hl=en-IN&gl=IN&ceid=IN:en",
+        "https://news.google.com/rss/search?q=%22NMMSS%22+OR+%22National+Means-cum-Merit%22+when:7d&hl=en-IN&gl=IN&ceid=IN:en"
     ]
 
     for rss_url in rss_queries:

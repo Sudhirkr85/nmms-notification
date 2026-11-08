@@ -200,7 +200,7 @@ EVALUATE AND ACT:
      * If history already has a post announcing the SAME deadline extension (e.g. history already announced deadline 15 Nov, and candidate also reports deadline 15 Nov), return TRUE (Duplicate).
      * If history already announced the same Answer Key, same Result, or same Admit Card release, return TRUE (Duplicate).
      * If media outlets rephrased the same event or press release under different headlines, return TRUE (Duplicate).
-   - ONLY return FALSE (Allow) if this candidate notice brings a GENUINE NEW EVENT (e.g. an earlier post had deadline 15 Nov, but this notice announces a new government order extending it to 30 Nov; or this is an Answer Key release when only the exam was previously posted)."""
+   - ONLY return FALSE (Allow) if this candidate notice brings a GENUINE NEW EVENT (e.g. an earlier post had deadline 15 Nov, but this notice announces a new government order extending it to 30 Nov; or this is an Answer Key release when only the exam was previously posted).
 
 3. STRICT RULE FOR HIGHLIGHTS (NO GENERIC COPY-PASTE):
    - Do NOT output generic boilerplate slogans like "Students receive Rs 12,000/yr" or generic advice.
@@ -233,7 +233,7 @@ Return ONLY valid JSON with this exact structure:
 Important: Output ONLY the JSON object, no markdown code fence."""
 
     client = Groq(api_key=api_key)
-    models_to_try = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "qwen/qwen3.8-27b"]
+    models_to_try = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
 
     for model_name in models_to_try:
         try:
@@ -271,17 +271,16 @@ Important: Output ONLY the JSON object, no markdown code fence."""
             logger.warning(f"Groq model {model_name} error: {e}")
             continue
 
-    logger.error("All Groq AI models failed or rate limited.")
-    fallback = get_fallback_highlights("DATE_EXTENSION" if any(w in title.lower() for w in ["extend", "deadline"]) else "CIRCULAR", state, title)
+    logger.error("All Groq AI models failed or rate limited. Rejecting candidate notice for safety.")
     return {
-        "is_student_actionable": True,
-        "is_semantic_duplicate": False,
-        "rejection_reason": None,
-        "category": "DATE_EXTENSION" if any(w in title.lower() for w in ["extend", "deadline"]) else "CIRCULAR",
+        "is_student_actionable": False,
+        "is_semantic_duplicate": True,
+        "rejection_reason": "AI service unavailable; unsafe to post unverified announcement.",
+        "category": "CIRCULAR",
         "clean_title": title,
-        "start_date": "Active Now",
-        "last_date": headline_date or f"15 November {cur_year}",
+        "start_date": None,
+        "last_date": None,
         "exam_date": None,
-        "highlights_en": fallback["en"],
-        "highlights_hi": fallback["hi"]
+        "highlights_en": [],
+        "highlights_hi": []
     }

@@ -62,12 +62,12 @@ def process_and_post_notice(notice: dict) -> int:
     ai_data = analyze_notice_with_groq(state, notice["title"], target_url, recent_posts=recent_posts, raw_text=raw_ctx)
 
     # GATE 1: AI Student-Actionable Check (Rejects DEO letters, question papers, attendance sheets)
-    if not ai_data.get("is_student_actionable", True):
+    if not ai_data.get("is_student_actionable", False):
         logger.info(f"   -> [AI GATE REJECT] Not student-actionable: {ai_data.get('rejection_reason')} ('{notice['title']}')")
         return 0
 
     # GATE 2: AI Semantic Deduplication Check (Catches rephrased identical events)
-    if ai_data.get("is_semantic_duplicate", False):
+    if ai_data.get("is_semantic_duplicate", True):
         logger.info(f"   -> [AI DUPLICATE REJECT] Semantic duplicate: {ai_data.get('rejection_reason')} ('{notice['title']}')")
         return 0
 

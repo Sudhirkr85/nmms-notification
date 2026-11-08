@@ -204,15 +204,15 @@ def scrape_state_news_rss(state: str, config: dict) -> List[Dict]:
 
     queries = []
     if alias and alias.lower() != state.lower():
-        queries.append(f'https://news.google.com/rss/search?q=%22NMMS%22+(%22{state}%22+OR+%22{alias}%22)&hl=en-IN&gl=IN&ceid=IN:en')
+        queries.append(f'https://news.google.com/rss/search?q=%22NMMS%22+(%22{state}%22+OR+%22{alias}%22)+when:7d&hl=en-IN&gl=IN&ceid=IN:en')
     else:
-        queries.append(f'https://news.google.com/rss/search?q=%22NMMS%22+%22{state}%22&hl=en-IN&gl=IN&ceid=IN:en')
+        queries.append(f'https://news.google.com/rss/search?q=%22NMMS%22+%22{state}%22+when:7d&hl=en-IN&gl=IN&ceid=IN:en')
 
     if hindi_name:
-        queries.append(f'https://news.google.com/rss/search?q=%22NMMS%22+%22{hindi_name}%22&hl=hi&gl=IN&ceid=IN:hi')
+        queries.append(f'https://news.google.com/rss/search?q=%22NMMS%22+%22{hindi_name}%22+when:7d&hl=hi&gl=IN&ceid=IN:hi')
 
     if state == "Uttar Pradesh":
-        queries.append('https://news.google.com/rss/search?q=%22entdata%22+OR+%22nmmsntsexam%22&hl=en-IN&gl=IN&ceid=IN:en')
+        queries.append('https://news.google.com/rss/search?q=(%22entdata%22+OR+%22nmmsntsexam%22)+when:7d&hl=en-IN&gl=IN&ceid=IN:en')
 
     # Other states list to prevent cross-state false positives
     other_states = [
