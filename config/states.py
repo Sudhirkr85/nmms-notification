@@ -14,10 +14,11 @@ TARGET_STATES: List[str] = [
 TARGET_STATES_AND_CENTRAL: List[str] = ["CENTRAL"] + TARGET_STATES
 
 # Official extra vendor / third-party domains explicitly whitelisted
-# Empty by default. User can configure or add verified domains here.
+# Include state examination authority portals (e.g. UP entdata.co.in, Haryana bsehexam2017.in)
 OFFICIAL_EXTRA_DOMAINS: List[str] = [
-    d.strip().lower() for d in os.getenv("OFFICIAL_EXTRA_DOMAINS", "").split(",") if d.strip()
-]
+    "entdata.co.in",
+    "bsehexam2017.in"
+] + [d.strip().lower() for d in os.getenv("OFFICIAL_EXTRA_DOMAINS", "").split(",") if d.strip()]
 
 STATE_CONFIG = {
     "Bihar": {
@@ -50,14 +51,14 @@ STATE_CONFIG = {
     },
     "Haryana": {
         "authority": "BSEH / SCERT Haryana",
-        "official_url": "https://bseh.org.in",
+        "official_url": "https://bseh.org.in/home",
         "alias": "Haryana",
         "hindi_name": "हरियाणा",
         "keywords": ["NMMS", "NMMSS", "National Means", "राष्ट्रीय आय"]
     },
     "Delhi": {
         "authority": "Directorate of Education Delhi",
-        "official_url": "https://edudel.nic.in",
+        "official_url": "http://www.edudel.nic.in/mis/misadmin/frmCircular.aspx",
         "alias": "Delhi",
         "hindi_name": "दिल्ली",
         "keywords": ["NMMS", "NMMSS", "National Means", "राष्ट्रीय आय"]

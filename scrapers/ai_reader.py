@@ -268,6 +268,10 @@ def _call_groq_stage_with_backoff(
                         return None
 
                     if _is_retryable_server_error(e) and attempt < max_retries:
+                        err_str = str(e).lower()
+                        if "tokens per day" in err_str or "tpd" in err_str:
+                            logger.warning(f"[AI_DAILY_LIMIT] Daily token limit (TPD) reached on '{model}'. Skipping retries to try fallback model.")
+                            break
                         wait_time = (2 ** attempt) * 2
                         logger.warning(f"[AI_RETRY] Retryable error on '{model}' ({stage_name}, Attempt {attempt}/{max_retries}). Sleeping {wait_time}s: {e}")
                         time.sleep(wait_time)
@@ -456,6 +460,26 @@ SOURCE TEXT: Ministry circular regarding guidelines for post-matric higher educa
             "confidence": "high",
             "reason": "Circular is for post-matric schemes, strictly NOT Class 8 NMMS."
         })
+    },
+    {
+        "role": "user",
+        "content": """STATE: State Alpha
+TITLE: Answer Key NMMS 2027-28
+SOURCE TEXT: Answer Key NMMS 2027-28 released on official portal portal.alpha.gov.in by examination regulatory authority."""
+    },
+    {
+        "role": "assistant",
+        "content": json.dumps({
+            "decision": "ACCEPT",
+            "event_type": "ANSWER_KEY",
+            "state": "State Alpha",
+            "dates": [],
+            "title_hi": "स्टेट अल्फा NMMS 2027-28: उत्तर कुंजी जारी",
+            "summary_hi": "स्टेट अल्फा परीक्षा प्राधिकारी द्वारा NMMS 2027-28 की आधिकारिक उत्तर कुंजी जारी कर दी गई है।",
+            "summary_en": "The official answer key for NMMS 2027-28 has been released on the official portal.",
+            "confidence": "high",
+            "reason": "Official answer key release announcement on official portal."
+        })
     }
 ]
 
@@ -580,6 +604,7 @@ TASK:
    - Low factual confidence or no verifiable student event.
 4. event_type MUST be one of: FORM_START, LAST_DATE, EXTENSION, CORRECTION, EXAM_DATE, ADMIT_CARD, ANSWER_KEY, RESULT, NSP_APPLY, NSP_OTHER.
 5. In dates array, provide label, value, and evidence_quote. Every evidence_quote MUST be an EXACT VERBATIM QUOTE from the source text.
+   SPECIAL RULE FOR ANSWER_KEY, RESULT, ADMIT_CARD: Portal release notices announce that the key or result is out. They may not contain a future deadline date. For genuine official releases on the portal, mark confidence="high" and decision="ACCEPT" even if the dates array is empty ([]).
 6. summary_hi and summary_en MUST contain ONLY facts from this document (no invented information).
 
 Output strictly a JSON object:

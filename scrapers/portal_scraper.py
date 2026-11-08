@@ -54,6 +54,39 @@ def get_portal_status_map() -> Dict[str, str]:
 def get_portal_diagnostics() -> Dict[str, Dict[str, Any]]:
     return dict(PORTAL_DIAGNOSTICS)
 
+def fetch_rendered_html_with_playwright(url: str, wait_seconds: int = 6) -> tuple[str, str, List[Dict[str, str]]]:
+    """
+    Renders JavaScript-heavy or Cloudflare-protected page using Playwright Chromium in stealth mode.
+    Returns (html_content, page_title, links_list).
+    """
+    try:
+        from playwright.sync_api import sync_playwright
+        import time
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True, args=['--disable-blink-features=AutomationControlled'])
+            context = browser.new_context(
+                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+            )
+            page = context.new_page()
+            page.add_init_script('delete Object.getPrototypeOf(navigator).webdriver')
+            page.goto(url, timeout=30000)
+            time.sleep(wait_seconds)
+            html = page.content()
+            title = page.title()
+            extracted_links = []
+            for a in page.query_selector_all('a'):
+                href = a.get_attribute('href') or ""
+                text = a.inner_text().strip()
+                if not text:
+                    text = a.get_attribute('title') or a.get_attribute('aria-label') or ""
+                if href or text:
+                    extracted_links.append({"href": href, "text": text})
+            browser.close()
+            return html, title, extracted_links
+    except Exception as e:
+        logger.debug(f"Playwright rendering failed for {url}: {e}")
+        return "", "", []
+
 def resolve_news_link(url: str, timeout: int = 8) -> tuple[str, str]:
     """
     Resolves news.google.com/rss/articles/... link to real publisher URL and publisher domain.
@@ -414,6 +447,61 @@ def scrape_state_website(state: str, config: dict) -> List[Dict]:
             diag["status"] = f"ERROR: {type(e).__name__}"
         diag["summary"] = err_msg[:70]
         logger.warning(f"Direct portal scrape error for {state} ({url}): {e}")
+
+    # Playwright fallback for JS-rendered / Cloudflare-protected / blocked portals
+    if not portal_found and (diag["is_js_rendered"] or diag["is_blocked"] or "entdata.co.in" in url or diag["total_links"] == 0 or diag["status"].startswith("ERROR")):
+        logger.info(f"Attempting Playwright stealth rendering for {state} ({url})...")
+        pw_html, pw_title, pw_links = fetch_rendered_html_with_playwright(url, wait_seconds=6)
+        if pw_links:
+            diag["is_js_rendered"] = False
+            diag["is_blocked"] = False
+            diag["status"] = "OK"
+            diag["total_links"] = len(pw_links)
+            PORTAL_STATUS_MAP[state] = "OK"
+            today = get_ist_today()
+            for item in pw_links:
+                text = item.get("text", "").strip()
+                raw_href = item.get("href", "").strip()
+                if not text or not raw_href:
+                    continue
+                if not any(k.lower() in text.lower() for k in keywords):
+                    continue
+                diag["nmms_links"] += 1
+                resolved_url = clean_and_normalize_url(url, raw_href)
+                url_lower = resolved_url.lower()
+                doc_extensions = (".pdf", ".jpg", ".jpeg", ".png")
+                is_doc = any(url_lower.endswith(ext) for ext in doc_extensions)
+                if is_junk_notice(text, resolved_url) or is_outdated_archive(text, resolved_url):
+                    continue
+                if not is_doc and is_bare_scheme_name(text):
+                    continue
+                chash = compute_content_hash(state, text, resolved_url)
+                if chash in seen_hashes or is_content_hash_seen(chash):
+                    continue
+                seen_hashes.add(chash)
+                portal_found.append({
+                    "content_hash": chash,
+                    "state": state,
+                    "authority": config.get("authority", "State Education Board"),
+                    "title": text,
+                    "update_type": "Official Circular",
+                    "apply_link": url,
+                    "pdf_link": resolved_url if is_doc else "",
+                    "source_url": resolved_url,
+                    "publisher_url": resolved_url,
+                    "publisher_domain": urlsplit(url).netloc.lower().split(":")[0].strip(),
+                    "pub_date": today.isoformat(),
+                    "pub_date_obj": today,
+                    "pub_date_year": today.year,
+                    "apply_start": "",
+                    "last_date": "अंतिम तिथि: आधिकारिक सूचना देखें",
+                    "exam_date": "",
+                    "content_context": f"{text}. Official notice on {config.get('authority', 'State Board')} ({url}) {pw_title}".strip(),
+                    "is_fallback": False,
+                    "origin": "portal"
+                })
+                if len(portal_found) >= 2:
+                    break
 
     # Set diagnostic summary if 0 items found
     if not portal_found:
