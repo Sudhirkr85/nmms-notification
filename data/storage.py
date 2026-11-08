@@ -370,7 +370,6 @@ def try_insert(candidate_data: dict) -> bool:
     col = _get_collection()
 
     doc = {
-        "key": key,
         "content_hash": content_hash,
         "state": state,
         "event_type": candidate_data.get("event_type", ""),
@@ -389,6 +388,8 @@ def try_insert(candidate_data: dict) -> bool:
         "reminder_3d_sent": False,
         "reminder_1d_sent": False
     }
+    if key:
+        doc["key"] = key
 
     if col is not None:
         try:
@@ -526,7 +527,6 @@ def mark_rejected(content_hash: str, state: str, title: str, reason: str, event_
 
     doc = {
         "content_hash": content_hash,
-        "key": None,
         "state": state,
         "title": title,
         "event_type": event_type,

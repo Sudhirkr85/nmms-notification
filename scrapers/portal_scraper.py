@@ -425,6 +425,7 @@ def scrape_state_website(state: str, config: dict) -> List[Dict]:
                     continue
                 seen_hashes.add(chash)
 
+                today = get_ist_today()
                 portal_found.append({
                     "content_hash": chash,
                     "state": state,
@@ -436,10 +437,13 @@ def scrape_state_website(state: str, config: dict) -> List[Dict]:
                     "source_url": resolved_url,
                     "publisher_url": resolved_url,
                     "publisher_domain": urlsplit(url).netloc.lower().split(":")[0].strip(),
+                    "pub_date": today.isoformat(),
+                    "pub_date_obj": today,
+                    "pub_date_year": today.year,
                     "apply_start": "",
                     "last_date": "अंतिम तिथि: आधिकारिक सूचना देखें",
                     "exam_date": "",
-                    "content_context": "",
+                    "content_context": f"{text}. Official notice on {config.get('authority', 'State Board')} ({url})".strip(),
                     "is_fallback": False,
                     "origin": "portal"
                 })
