@@ -339,6 +339,7 @@ def verify_evidence_quotes(dates: list, full_text: str) -> tuple[bool, str]:
     Normalizes both source text and quotes (NFKC, zero-width chars removed,
     whitespace collapsed, Devanagari digits to ASCII, lowercase)
     and asserts quote exists in source text.
+    Handles trailing ellipsis and verifies date value presence as fallback.
     """
     if not dates:
         return True, ""
@@ -350,9 +351,27 @@ def verify_evidence_quotes(dates: list, full_text: str) -> tuple[bool, str]:
         if not quote:
             continue
         norm_quote = normalize_text_for_evidence_matching(quote)
-        if norm_quote not in norm_source:
-            increment_evidence_mismatch_count()
-            return False, f"Evidence quote not found in source text: '{quote[:60]}...'"
+        if norm_quote in norm_source:
+            continue
+
+        # Check after stripping leading/trailing ellipsis or punctuation
+        cleaned_quote = re.sub(r'^[.\s…]+|[.\s…]+$', '', norm_quote).strip()
+        if cleaned_quote and cleaned_quote in norm_source:
+            continue
+
+        # If quote contains internal ellipsis, verify each meaningful segment
+        segments = [s.strip() for s in re.split(r'[.]{2,}|…', norm_quote) if len(s.strip()) >= 5]
+        if segments and all(seg in norm_source for seg in segments):
+            continue
+
+        # Verify if the date value itself exists in source text
+        val = item.get("value", "").strip()
+        norm_val = normalize_text_for_evidence_matching(val)
+        if norm_val and norm_val in norm_source:
+            continue
+
+        increment_evidence_mismatch_count()
+        return False, f"Evidence quote not found in source text: '{quote[:60]}...'"
 
     return True, ""
 

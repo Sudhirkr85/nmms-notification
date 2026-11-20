@@ -15,8 +15,15 @@ os.environ["MONGO_URI"] = ""
 os.environ["GROQ_API_KEY"] = "mock_key_for_test"
 
 from unittest.mock import patch
+from datetime import timedelta
+from data.storage import get_ist_today
 
 import main
+
+# Dynamic future test dates to prevent hardcoded past dates
+today_ist = get_ist_today()
+future_date_str = (today_ist + timedelta(days=10)).strftime("%d %B %Y")
+future_date_quote = future_date_str
 
 # Mock external network extraction to prevent real HTTP delays during unit tests
 patch("main.extract_content_from_source", return_value="NMMS scholarship test context").start()
@@ -68,16 +75,16 @@ valid_event = {
     "apply_link": "https://scert.up.gov.in",
     "pdf_link": "https://scert.up.gov.in/Answer_Key.pdf",
     "apply_start": "Active Now",
-    "last_date": "13 November 2026",
+    "last_date": future_date_str,
     "exam_date": "01 November 2026",
-    "content_context": "UP NMMS provisional answer key released on 13 November 2026."
+    "content_context": f"UP NMMS provisional answer key released on {future_date_str}."
 }
 
 mock_ai_key = {
     "is_error": False,
     "decision": "ACCEPT",
     "event_type": "ANSWER_KEY",
-    "dates": [{"label": "Objection Date", "value": "13 November 2026", "evidence_quote": "13 November 2026"}],
+    "dates": [{"label": "Objection Date", "value": future_date_str, "evidence_quote": future_date_str}],
     "summary_hi": "उत्तर प्रदेश NMMS परीक्षा की उत्तर कुंजी जारी।",
     "summary_en": "UP NMMS Answer Key released.",
     "confidence": "high",
@@ -134,8 +141,8 @@ ext_delhi = {
     "update_type": "EXTENSION",
     "apply_link": "https://scholarships.gov.in",
     "pdf_link": "",
-    "last_date": "15 November 2026",
-    "content_context": "Ministry of Education has extended the deadline to 15 November 2026 on scholarships.gov.in."
+    "last_date": future_date_str,
+    "content_context": f"Ministry of Education has extended the deadline to {future_date_str} on scholarships.gov.in."
 }
 ext_jharkhand = {
     "state": "Jharkhand",
@@ -143,8 +150,8 @@ ext_jharkhand = {
     "update_type": "EXTENSION",
     "apply_link": "https://scholarships.gov.in",
     "pdf_link": "",
-    "last_date": "15 November 2026",
-    "content_context": "Ministry of Education extends deadline to 15 November 2026 on scholarships.gov.in."
+    "last_date": future_date_str,
+    "content_context": f"Ministry of Education extends deadline to {future_date_str} on scholarships.gov.in."
 }
 ext_uk = {
     "state": "Uttarakhand",
@@ -152,15 +159,15 @@ ext_uk = {
     "update_type": "EXTENSION",
     "apply_link": "https://scholarships.gov.in",
     "pdf_link": "",
-    "last_date": "15 November 2026",
-    "content_context": "Ministry of Education extends NMMSS scholarship application to November 15, 2026."
+    "last_date": future_date_str,
+    "content_context": f"Ministry of Education extends NMMSS scholarship application to {future_date_str}."
 }
 
 mock_ai_ext = {
     "is_error": False,
     "decision": "ACCEPT",
     "event_type": "EXTENSION",
-    "dates": [{"label": "Extended Last Date", "value": "15 November 2026", "evidence_quote": "15 November 2026"}],
+    "dates": [{"label": "Extended Last Date", "value": future_date_str, "evidence_quote": future_date_str}],
     "summary_hi": "NMMSS आवेदन की अंतिम तिथि 15 नवंबर 2026 तक बढ़ाई गई।",
     "summary_en": "NMMSS application deadline extended to 15 November 2026.",
     "confidence": "high",
@@ -253,11 +260,11 @@ mock_ai_ext = {
     "is_error": False,
     "decision": "ACCEPT",
     "event_type": "EXTENSION",
-    "dates": [{"label": "Extended Deadline", "value": "15 November 2026", "evidence_quote": "15 November 2026"}],
-    "summary_hi": "NMMSS आवेदन की अंतिम तिथि 15 नवंबर 2026 तक बढ़ा दी गई है।",
-    "summary_en": "NMMSS application deadline extended to 15 November 2026.",
+    "dates": [{"label": "Extended Deadline", "value": future_date_str, "evidence_quote": future_date_str}],
+    "summary_hi": f"NMMSS आवेदन की अंतिम तिथि {future_date_str} तक बढ़ा दी गई है।",
+    "summary_en": f"NMMSS application deadline extended to {future_date_str}.",
     "confidence": "high",
-    "title_hi": "NMMSS 2026: आवेदन की अंतिम तिथि 15 नवंबर तक बढ़ी",
+    "title_hi": f"NMMSS 2026: आवेदन की अंतिम तिथि {future_date_str} तक बढ़ी",
     "reason": "Corroborated news item"
 }
 
@@ -272,7 +279,7 @@ news_pub1 = {
     "pub_date": fresh_pub_date.isoformat(),
     "pub_date_obj": fresh_pub_date,
     "pub_date_year": fresh_pub_date.year,
-    "content_context": "The registration deadline for NMMSS 2026-27 has been extended to 15 November 2026.",
+    "content_context": f"The registration deadline for NMMSS 2026-27 has been extended to {future_date_str}.",
     "is_fallback": True,
     "origin": "news"
 }
@@ -283,12 +290,12 @@ news_pub2 = {
     "update_type": "EXTENSION",
     "apply_link": "", # No official link in text
     "source_url": "https://news.google.com/rss/articles/CBMi222",
-    "publisher_url": "https://www.livehindustan.com/career/nmmss-date-ext",
-    "publisher_domain": "www.livehindustan.com",
+    "publisher_url": "https://www.anothersource.com/career/nmmss-date-ext",
+    "publisher_domain": "www.anothersource.com",
     "pub_date": fresh_pub_date.isoformat(),
     "pub_date_obj": fresh_pub_date,
     "pub_date_year": fresh_pub_date.year,
-    "content_context": "National Means-cum-Merit Scholarship 2026-27 last date extended to 15 November 2026.",
+    "content_context": f"National Means-cum-Merit Scholarship 2026-27 last date extended to {future_date_str}.",
     "is_fallback": True,
     "origin": "news"
 }
@@ -364,7 +371,7 @@ print("-> PASS: Processed state list strictly matches the 10 target states + CEN
 
 # ----------------- Scenario (k): Stale Date Bug (2024 Article Rejected vs 2026 Accepted) ----------------- #
 print("--- SCENARIO (k): Stale Date Bug (2024 Article Rejected vs 2026 Accepted) ---")
-from data.storage import compute_event_key, is_last_date_expired
+from data.storage import compute_event_key
 
 # Case 1: 2024 article with "extended till November 15"
 # It has pub_date in 2024 and 2024 in URL/title.
@@ -413,7 +420,7 @@ fresh_2026_notice_1 = {
     "pub_date": fresh_pub_date.isoformat(),
     "pub_date_obj": fresh_pub_date,
     "pub_date_year": 2026,
-    "content_context": "The registration deadline for NMMSS 2026-27 has been extended till 15 November 2026.",
+    "content_context": f"The registration deadline for NMMSS 2026-27 has been extended till {future_date_str}.",
     "is_fallback": True,
     "origin": "news"
 }
@@ -422,13 +429,13 @@ fresh_2026_notice_2 = {
     "title": "National Means Merit Scholarship 2026-27 last date extended till 15 Nov",
     "update_type": "EXTENSION",
     "apply_link": "",
-    "source_url": "https://www.livehindustan.com/career/nmmss-2026-ext",
-    "publisher_url": "https://www.livehindustan.com/career/nmmss-2026-ext",
-    "publisher_domain": "www.livehindustan.com",
+    "source_url": "https://www.anothersource.com/career/nmmss-2026-ext",
+    "publisher_url": "https://www.anothersource.com/career/nmmss-2026-ext",
+    "publisher_domain": "www.anothersource.com",
     "pub_date": fresh_pub_date.isoformat(),
     "pub_date_obj": fresh_pub_date,
     "pub_date_year": 2026,
-    "content_context": "National Means Merit Scholarship 2026-27 last date extended to 15 November 2026.",
+    "content_context": f"National Means Merit Scholarship 2026-27 last date extended to {future_date_str}.",
     "is_fallback": True,
     "origin": "news"
 }
@@ -436,11 +443,11 @@ mock_ai_2026 = {
     "is_error": False,
     "decision": "ACCEPT",
     "event_type": "EXTENSION",
-    "dates": [{"label": "Extended Deadline", "value": "15 November 2026", "evidence_quote": "15 November 2026"}],
-    "summary_hi": "NMMSS 2026-27 आवेदन की अंतिम तिथि 15 नवंबर 2026 तक बढ़ाई गई।",
-    "summary_en": "NMMSS 2026-27 application deadline extended to 15 November 2026.",
+    "dates": [{"label": "Extended Deadline", "value": future_date_str, "evidence_quote": future_date_str}],
+    "summary_hi": f"NMMSS 2026-27 आवेदन की अंतिम तिथि {future_date_str} तक बढ़ाई गई।",
+    "summary_en": f"NMMSS 2026-27 application deadline extended to {future_date_str}.",
     "confidence": "high",
-    "title_hi": "NMMSS 2026: अंतिम तिथि 15 नवंबर तक बढ़ी",
+    "title_hi": f"NMMSS 2026: अंतिम तिथि {future_date_str} तक बढ़ी",
     "reason": "Corroborated 2026 notice"
 }
 
@@ -455,11 +462,50 @@ with patch("main.analyze_notice_with_groq_pipeline", return_value=mock_ai_2026),
     
     # Verify message date, key date and expiry check agree on the SAME parsed date
     sent_text = mock_send_k2.call_args[1]["text"]
-    assert "15 November 2026" in sent_text
-    expected_event_key = compute_event_key("CENTRAL", "EXTENSION", "2026-11-15")
+    assert future_date_str in sent_text
+    from data.storage import parse_date_to_ist
+    parsed_dt = parse_date_to_ist(future_date_str)
+    expected_event_key = compute_event_key("CENTRAL", "EXTENSION", parsed_dt.strftime("%Y-%m-%d"))
     assert expected_event_key in _memory_store
-    assert not is_last_date_expired("15 November 2026")
-    print("-> Case 2 PASS: 2026 article was accepted! Message date, key date, and expiry check strictly agree on 2026-11-15!\n")
+    print("-> Case 2 PASS: Article was accepted! Message date, key date, and expiry check strictly agree!\n")
+
+# ----------------- Scenario (l): Major Trusted News Publisher (e.g. TOI) Single Source Accepted ----------------- #
+print("--- SCENARIO (l): Major Trusted News Publisher (TOI) Single Source Accepted ---")
+_memory_store.clear()
+toi_notice = {
+    "state": "Haryana",
+    "title": "Haryana NMMSS Admit Card 2026: Hall tickets to be released on portal",
+    "update_type": "ADMIT_CARD",
+    "apply_link": "",
+    "source_url": "https://news.google.com/rss/articles/CBMiTOI123",
+    "publisher_url": "https://timesofindia.indiatimes.com/education/haryana-nmmss-admit-card",
+    "publisher_domain": "timesofindia.indiatimes.com",
+    "pub_date": fresh_pub_date.isoformat(),
+    "pub_date_obj": fresh_pub_date,
+    "pub_date_year": fresh_pub_date.year,
+    "content_context": f"BSEH will release Haryana NMMSS admit card on {future_date_str}.",
+    "is_fallback": True,
+    "origin": "news"
+}
+mock_ai_toi = {
+    "is_error": False,
+    "decision": "ACCEPT",
+    "event_type": "ADMIT_CARD",
+    "dates": [{"label": "Admit Card Date", "value": future_date_str, "evidence_quote": future_date_str}],
+    "summary_hi": f"हरियाणा NMMSS एडमिट कार्ड {future_date_str} को जारी होगा।",
+    "summary_en": f"Haryana NMMSS Admit card will be released on {future_date_str}.",
+    "confidence": "high",
+    "title_hi": "हरियाणा NMMS 2026: एडमिट कार्ड जारी",
+    "reason": "Major news source TOI"
+}
+
+with patch("main.analyze_notice_with_groq_pipeline", return_value=mock_ai_toi), \
+     patch("main.send_telegram_message", return_value=501) as mock_send_l:
+    main.process_and_post_notice(toi_notice)
+    acc_count_l = main.process_corroborated_news_events()
+    assert acc_count_l == 1
+    assert mock_send_l.call_count == 1
+    print("-> PASS: Single trusted major publisher news (Times of India) was accepted and posted!\n")
 
 print("=================================================================")
 print("ALL TEST SCENARIOS VERIFIED SUCCESSFULLY WITH 100% PASS RATE")

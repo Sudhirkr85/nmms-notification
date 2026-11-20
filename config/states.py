@@ -14,11 +14,30 @@ TARGET_STATES: List[str] = [
 TARGET_STATES_AND_CENTRAL: List[str] = ["CENTRAL"] + TARGET_STATES
 
 # Official extra vendor / third-party domains explicitly whitelisted
-# Include state examination authority portals (e.g. UP entdata.co.in, Haryana bsehexam2017.in)
+# Include state examination authority portals (e.g. UP entdata.co.in, Haryana bsehexam2017.in, Haryana bseh.org.in)
 OFFICIAL_EXTRA_DOMAINS: List[str] = [
     "entdata.co.in",
-    "bsehexam2017.in"
+    "bsehexam2017.in",
+    "bseh.org.in"
 ] + [d.strip().lower() for d in os.getenv("OFFICIAL_EXTRA_DOMAINS", "").split(",") if d.strip()]
+
+# Major trusted national news publishers (can be accepted with single publication)
+TRUSTED_NEWS_DOMAINS: List[str] = [
+    "timesofindia.indiatimes.com",
+    "indiatimes.com",
+    "navbharattimes.indiatimes.com",
+    "livehindustan.com",
+    "hindustantimes.com",
+    "amarujala.com",
+    "jagran.com",
+    "dainikjagran.com",
+    "ndtv.com",
+    "indianexpress.com",
+    "jansatta.com",
+    "news18.com",
+    "abplive.com",
+    "zeenews.india.com"
+]
 
 STATE_CONFIG = {
     "Bihar": {

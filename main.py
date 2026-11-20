@@ -28,7 +28,7 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-from config.states import STATE_CONFIG, OFFICIAL_EXTRA_DOMAINS, TARGET_STATES_AND_CENTRAL
+from config.states import STATE_CONFIG, OFFICIAL_EXTRA_DOMAINS, TARGET_STATES_AND_CENTRAL, TRUSTED_NEWS_DOMAINS
 from data.storage import (
     init_mongo_storage,
     compute_content_hash,
@@ -664,7 +664,12 @@ def process_corroborated_news_events() -> int:
             if c.get("publisher_url"):
                 resolved_urls.append(c["publisher_url"])
 
-        if len(domains) >= 2:
+        has_trusted_publisher = any(
+            any(td in dom or dom.endswith("." + td) for td in TRUSTED_NEWS_DOMAINS)
+            for dom in domains
+        )
+
+        if len(domains) >= 2 or has_trusted_publisher:
             # Check official portal in config
             if state == "CENTRAL":
                 official_portal = "https://scholarships.gov.in"
@@ -721,7 +726,8 @@ def process_corroborated_news_events() -> int:
                     record_stat("accepted")
                     record_coverage(state, "accepted")
                     accepted_count += 1
-                    log_notice_decision(state, event_type, "ACCEPT", f"Corroborated by {len(domains)} publisher domains ({', '.join(sorted(domains))})")
+                    corrob_label = f"Corroborated by {len(domains)} publisher domains ({', '.join(sorted(domains))})" if len(domains) >= 2 else f"Verified major trusted publisher ({', '.join(sorted(domains))})"
+                    log_notice_decision(state, event_type, "ACCEPT", corrob_label)
                 else:
                     mark_failed(event_key, rep["content_hash"], "Telegram post failed")
                     log_notice_decision(state, event_type, "FAILED", "Telegram send failed for corroborated news")
@@ -734,7 +740,7 @@ def process_corroborated_news_events() -> int:
                 log_notice_decision(state, event_type, "REJECT", reason)
         else:
             found_str = ", ".join(sorted(domains)) if domains else "none"
-            reason = f"News-only event rejected: requires corroboration from at least 2 different publisher domains (found {len(domains)}: {found_str})"
+            reason = f"News-only event rejected: requires major trusted publisher or corroboration from at least 2 different publisher domains (found {len(domains)}: {found_str})"
             for c in group:
                 mark_rejected(c["content_hash"], state, c["title"], reason, event_type)
             record_stat("rejected", reason)
