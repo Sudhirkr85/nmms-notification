@@ -507,6 +507,75 @@ with patch("main.analyze_notice_with_groq_pipeline", return_value=mock_ai_toi), 
     assert mock_send_l.call_count == 1
     print("-> PASS: Single trusted major publisher news (Times of India) was accepted and posted!\n")
 
+# ----------------- Scenario (m): State Pollution Guard (Rajasthan Title searched under Bihar rejected) ----------------- #
+print("--- SCENARIO (m): State Pollution Guard (Rajasthan in Title searched under Bihar is REJECTED) ---")
+_memory_store.clear()
+pollution_notice = {
+    "state": "Bihar",
+    "title": "Rajasthan NMMS 2026-27: Check Eligibility, Exam Date, Application Process",
+    "update_type": "EXAM_DATE",
+    "apply_link": "",
+    "source_url": "https://news.google.com/rss/articles/CBMiRAJ123",
+    "publisher_url": "https://timesofindia.indiatimes.com/education/rajasthan-nmms-2026",
+    "publisher_domain": "timesofindia.indiatimes.com",
+    "pub_date": fresh_pub_date.isoformat(),
+    "pub_date_obj": fresh_pub_date,
+    "pub_date_year": fresh_pub_date.year,
+    "content_context": f"Rajasthan NMMS 2026 exam will be held soon. Students from Bihar and other states can read rules.",
+    "is_fallback": True,
+    "origin": "news"
+}
+with patch("main.analyze_notice_with_groq_pipeline") as mock_ai_poll, \
+     patch("main.send_telegram_message") as mock_send_poll:
+    res_poll = main.process_and_post_notice(pollution_notice)
+    assert res_poll == 0
+    # Must NOT call AI or post to telegram
+    assert mock_ai_poll.call_count == 0
+    assert mock_send_poll.call_count == 0
+    print("-> PASS: Rajasthan title searched under Bihar was strictly REJECTED before AI call!\n")
+
+# ----------------- Scenario (n): Strict Central Override Guard (State/District exam NOT converted to CENTRAL) ----------------- #
+print("--- SCENARIO (n): Strict Central Guard (Nuh Haryana exam is NOT overridden to CENTRAL) ---")
+_memory_store.clear()
+haryana_nuh_notice = {
+    "state": "Haryana",
+    "title": "कक्षा 9वीं से 12वीं तक हर माह 1000 रुपये छात्रवृत्ति पाने का मौका, नूंह में 29 नवंबर को होगी NMMS परीक्षा",
+    "update_type": "EXAM_DATE",
+    "apply_link": "",
+    "source_url": "https://news.google.com/rss/articles/CBMiNUH123",
+    "publisher_url": "https://timesofindia.indiatimes.com/education/nuh-haryana-nmms",
+    "publisher_domain": "timesofindia.indiatimes.com",
+    "pub_date": fresh_pub_date.isoformat(),
+    "pub_date_obj": fresh_pub_date,
+    "pub_date_year": fresh_pub_date.year,
+    "content_context": f"हरियाणा के नूंह में NMMS परीक्षा 29 नवंबर को होगी। scholarships.gov.in पर विवरण उपलब्ध है। शिक्षा मंत्रालय द्वारा यह योजना संचालित है।",
+    "is_fallback": True,
+    "origin": "news"
+}
+mock_ai_nuh = {
+    "is_error": False,
+    "decision": "ACCEPT",
+    "event_type": "EXAM_DATE",
+    "state": "Haryana",
+    "dates": [{"label": "Exam Date", "value": future_date_str, "evidence_quote": future_date_str}],
+    "summary_hi": f"हरियाणा के नूंह में NMMS परीक्षा {future_date_str} को होगी।",
+    "summary_en": f"Haryana Nuh NMMS exam will be held on {future_date_str}.",
+    "confidence": "high",
+    "title_hi": "हरियाणा नूंह NMMS: परीक्षा तिथि घोषित",
+    "reason": "District exam announcement"
+}
+with patch("main.analyze_notice_with_groq_pipeline", return_value=mock_ai_nuh), \
+     patch("main.send_telegram_message", return_value=601) as mock_send_nuh:
+    main.process_and_post_notice(haryana_nuh_notice)
+    acc_count_nuh = main.process_corroborated_news_events()
+    assert acc_count_nuh == 1
+    assert mock_send_nuh.call_count == 1
+    # Check that the sent message retained State 'Haryana' and BSEH official portal, NOT CENTRAL scholarships.gov.in
+    call_kwargs = mock_send_nuh.call_args[1]
+    assert "https://bseh.org.in" in call_kwargs["apply_url"]
+    assert "हरियाणा" in call_kwargs["text"]
+    print("-> PASS: Nuh Haryana notice correctly retained Haryana state and BSEH portal, NOT overridden to CENTRAL!\n")
+
 print("=================================================================")
 print("ALL TEST SCENARIOS VERIFIED SUCCESSFULLY WITH 100% PASS RATE")
 print("=================================================================")

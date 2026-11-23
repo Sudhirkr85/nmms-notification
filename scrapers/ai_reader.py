@@ -618,6 +618,7 @@ TASK:
 1. Extract structured factual data from the notice.
 2. Determine decision: ACCEPT or REJECT.
 3. Reject if:
+   - State mismatch: The notice is specifically for a different state than the target state '{state}' (unless target state is CENTRAL or the notice is an all-India national circular).
    - Expired date: Any primary deadline in notice has already passed before {today_ist}.
    - Semantic duplicate: History already contains this exact announcement with the same dates/facts.
    - Low factual confidence or no verifiable student event.
@@ -625,12 +626,13 @@ TASK:
 5. In dates array, provide label, value, and evidence_quote. Every evidence_quote MUST be an EXACT VERBATIM QUOTE from the source text.
    SPECIAL RULE FOR ANSWER_KEY, RESULT, ADMIT_CARD: Portal release notices announce that the key or result is out. They may not contain a future deadline date. For genuine official releases on the portal, mark confidence="high" and decision="ACCEPT" even if the dates array is empty ([]).
 6. summary_hi and summary_en MUST contain ONLY facts from this document (no invented information).
+7. state field MUST be the true state the notice belongs to (e.g. Rajasthan, Bihar, Haryana, Central, etc.). Do NOT force '{state}' if the document is clearly about another state.
 
 Output strictly a JSON object:
 {{
   "decision": "ACCEPT" | "REJECT",
   "event_type": "ENUM_VALUE",
-  "state": "{state}",
+  "state": "Name of the state the notice belongs to",
   "title_hi": "Clean concise Hindi title max 80 chars without mid-word truncation",
   "dates": [
     {{"label": "Label", "value": "Date Value", "evidence_quote": "Verbatim quote from source text"}}

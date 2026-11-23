@@ -238,27 +238,56 @@ def extract_official_link(notice: dict, target_url: str, raw_content: str) -> Op
 
 def is_central_event(state: str, title: str, text: str, url: str, ai_result: dict = None) -> bool:
     """
-    Determines if a notice is about the national NMMSS scholarship / NSP.
+    Determines if a notice is strictly about the national NMMSS scholarship / NSP.
     If yes, state must be set to 'CENTRAL' regardless of which state's search found it.
+    Crucial guard: NEVER override to CENTRAL if the notice is specifically for a state/district exam.
     """
+    title_lower = (title or "").lower()
+    text_lower = (text or "").lower()
     combined = f"{state} {title} {text} {url}".lower()
+
+    # If the search state itself was already CENTRAL, it's central
+    if state.upper() == "CENTRAL":
+        return True
+
+    # If AI explicitly tagged it as central/nsp
     if ai_result:
         ai_state = (ai_result.get("state") or "").lower()
         if "central" in ai_state or "nsp" in ai_state:
             return True
 
-    if "scholarships.gov.in" in combined:
+    # If the notice mentions a state examination board / local authority, do NOT make it central
+    local_board_markers = ["bseh", "scert", "rskmp", "entdata", "shala darpan", "jac", "edudel", "pariksha niyamak"]
+    if any(m in combined for m in local_board_markers):
+        return False
+
+    # Central NSP portal or Education Ministry national announcements
+    has_central_authority = (
+        "scholarships.gov.in" in combined or
+        "ministry of education" in combined or
+        "education ministry" in combined or
+        "शिक्षा मंत्रालय" in combined or
+        ("national means" in combined and any(k in combined for k in ["central", "nsp", "all india", "national level"]))
+    )
+
+    if has_central_authority:
+        # Check if the title or text is specifically for a state's own examination/admit card/result
+        # or local district/city level exam (e.g. 'Haryana NMMS Admit Card', 'नूंह में 29 नवंबर को होगी NMMS परीक्षा')
+        # vs an all-India portal / national application deadline extension.
+        state_exam_words = [
+            "admit card", "प्रवेश पत्र", "answer key", "उत्तर कुंजी", "कटऑफ", "cut off",
+            "नूंह", "nuh", "परीक्षा होगी", "exam date", "परीक्षा तिथि", "सेंटर", "center", "centre"
+        ]
+        if any(w in title_lower for w in state_exam_words):
+            return False
         return True
-    if "ministry of education" in combined or "education ministry" in combined or "शिक्षा मंत्रालय" in combined:
-        return True
-    if "national means" in combined and any(k in combined for k in ["central", "nsp", "all india", "national level"]):
-        return True
+
     return False
 
 def is_state_pollution(target_state: str, title: str, text: str, url: str, is_fallback: bool = False) -> tuple[bool, str]:
     """
     Filters search fallback notices for other states in code before AI call.
-    Title/text must mention target state or be CENTRAL.
+    Title/text must belong to target state or be CENTRAL.
     Only applies to search fallbacks, not direct official portal items.
     """
     if not is_fallback:
@@ -269,27 +298,63 @@ def is_state_pollution(target_state: str, title: str, text: str, url: str, is_fa
 
     cfg = STATE_CONFIG.get(target_state, {})
     target_lower = target_state.lower()
-    keywords = [target_lower]
+    target_keywords = [target_lower]
     if cfg.get("hindi_name"):
-        keywords.append(cfg["hindi_name"].lower())
+        target_keywords.append(cfg["hindi_name"].lower())
     if cfg.get("alias"):
-        keywords.append(cfg["alias"].lower())
+        target_keywords.append(cfg["alias"].lower())
 
-    combined = f"{title} {text}".lower()
-    mentions_target = any(k in combined for k in keywords if k)
+    title_lower = (title or "").lower()
+    text_lower = (text or "").lower()
+    combined = f"{title_lower} {text_lower}"
+
+    # Dictionary of other states with their English and Hindi names / aliases
+    other_states_map = {
+        "bihar": ["bihar", "बिहार"],
+        "rajasthan": ["rajasthan", "राजस्थान"],
+        "haryana": ["haryana", "हरियाणा"],
+        "uttar pradesh": ["uttar pradesh", "उत्तर प्रदेश", "up nmms"],
+        "madhya pradesh": ["madhya pradesh", "मध्य प्रदेश", "mp nmms"],
+        "delhi": ["delhi", "दिल्ली"],
+        "jharkhand": ["jharkhand", "झारखंड", "झारखण्ड"],
+        "chhattisgarh": ["chhattisgarh", "छत्तीसगढ़", "छत्तीसगढ"],
+        "himachal pradesh": ["himachal pradesh", "himachal", "हिमाचल प्रदेश", "हिमाचल"],
+        "uttarakhand": ["uttarakhand", "उत्तराखंड", "उत्तराखण्ड"],
+        "punjab": ["punjab", "पंजाब"],
+        "maharashtra": ["maharashtra", "महाराष्ट्र"],
+        "gujarat": ["gujarat", "गुजरात"],
+        "odisha": ["odisha", "orissa", "ओडिशा"],
+        "west bengal": ["west bengal", "पश्चिम बंगाल"],
+        "assam": ["assam", "असम"],
+        "kerala": ["kerala", "केरल"],
+        "karnataka": ["karnataka", "कर्नाटक"],
+        "tamil nadu": ["tamil nadu", "तमिलनाडु"],
+        "andhra pradesh": ["andhra pradesh", "andhra", "आंध्र प्रदेश"],
+        "telangana": ["telangana", "तेलंगाना"]
+    }
+
+    # LOCK 1: TITLE-DOMINANT CHECK
+    # If the title explicitly mentions ANY OTHER state and does NOT mention target state, REJECT IMMEDIATELY.
+    # Title is the most definitive signal. Body text mentioning target state in passing cannot override a foreign title!
+    target_in_title = any(k in title_lower for k in target_keywords if k)
+    for st_key, aliases in other_states_map.items():
+        if st_key != target_lower and not any(k in st_key or st_key in k for k in target_keywords):
+            if any(alias in title_lower for alias in aliases):
+                if not target_in_title:
+                    return True, f"State pollution: Title is for {st_key.title()}, not {target_state}"
+
+    # LOCK 2: BODY TEXT CHECK
+    mentions_target = any(k in combined for k in target_keywords if k)
     if mentions_target:
+        # Even if mentions_target is true in body, if another state is prominently in title, it was rejected above.
+        # If target is mentioned and no conflicting state in title, allow through.
         return False, ""
 
-    # Check if other states are explicitly mentioned in title or text
-    other_states = [
-        "telangana", "kerala", "andhra", "tamil nadu", "karnataka",
-        "maharashtra", "gujarat", "odisha", "west bengal", "assam",
-        "punjab", "bihar", "rajasthan", "haryana", "delhi", "jharkhand",
-        "chhattisgarh", "himachal", "uttarakhand", "uttar pradesh"
-    ]
-    for os_name in other_states:
-        if os_name != target_lower and os_name in combined:
-            return True, f"State pollution: Notice is for {os_name.title()}, not {target_state}"
+    # If target is NOT mentioned anywhere, check if another state is mentioned
+    for st_key, aliases in other_states_map.items():
+        if st_key != target_lower:
+            if any(alias in combined for alias in aliases):
+                return True, f"State pollution: Notice is for {st_key.title()}, not {target_state}"
 
     return True, f"State pollution: Target state {target_state} not mentioned in notice"
 
@@ -470,6 +535,26 @@ def process_and_post_notice(notice: dict) -> int:
             record_coverage(state, "dropped_ai")
         log_notice_decision(state, event_type, "REJECT", reason)
         return 0
+
+    # LOCK 3: Post-AI State Verification
+    # If AI extracted a state (e.g. 'Rajasthan') and it conflicts with our target state (e.g. 'Bihar'), REJECT!
+    ai_extracted_state = (ai_result.get("state") or "").strip()
+    if ai_extracted_state and state.upper() != "CENTRAL":
+        cfg = STATE_CONFIG.get(state, {})
+        valid_state_names = [state.lower()]
+        if cfg.get("hindi_name"):
+            valid_state_names.append(cfg["hindi_name"].lower())
+        if cfg.get("alias"):
+            valid_state_names.append(cfg["alias"].lower())
+
+        ai_st_lower = ai_extracted_state.lower()
+        if not any(v in ai_st_lower or ai_st_lower in v for v in valid_state_names) and "central" not in ai_st_lower and "nsp" not in ai_st_lower:
+            mismatch_reason = f"AI State Mismatch: Notice is for {ai_extracted_state}, not {state}"
+            mark_rejected(content_hash, state, title, mismatch_reason, event_type)
+            record_stat("rejected", mismatch_reason)
+            record_coverage(state, "dropped_pollution")
+            log_notice_decision(state, event_type, "REJECT", mismatch_reason)
+            return 0
 
     # 5. Extract and parse dates with full year enforcement
     dates = ai_result.get("dates", [])
