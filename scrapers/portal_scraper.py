@@ -31,7 +31,7 @@ HEADERS = {
     "Upgrade-Insecure-Requests": "1"
 }
 
-# Strict blacklist of junk / administrative materials
+# Strict blacklist of junk / administrative materials / single-district local reports
 JUNK_KEYWORDS = [
     "question paper", "question_paper", "questionpaper", "sample paper", "model paper",
     "practice paper", "pyq", "previous year", "omr sheet",
@@ -42,7 +42,11 @@ JUNK_KEYWORDS = [
     "center list", "room allotment", "duty list", "seating plan", "allotment list",
     "tender", "quotation", "auction", "procurement", "bid", "e-tender", "rfp",
     "meeting", "minutes of meeting", "proceeding", "samiksha", "baithak",
-    "transfer", "deputation", "staff", "clerk", "voucher"
+    "transfer", "deputation", "staff", "clerk", "voucher",
+    # Single-district local news items that are not statewide announcements
+    "छात्रवृत्ति पाने का मौका", "छात्रवृत्ति का मौका", "पाने का मौका",
+    "जिले में", "आठ केंद्रों पर", "कक्षा 9वीं से 12वीं तक हर माह 1000",
+    "छात्र लेंगे भाग", "परीक्षार्थी देंगे परीक्षा"
 ]
 
 PORTAL_STATUS_MAP: Dict[str, str] = {}

@@ -308,29 +308,29 @@ def is_state_pollution(target_state: str, title: str, text: str, url: str, is_fa
     text_lower = (text or "").lower()
     combined = f"{title_lower} {text_lower}"
 
-    # Dictionary of other states with their English and Hindi names / aliases
+    # Dictionary of other states with their English and Hindi names / aliases and prominent districts/cities
     other_states_map = {
-        "bihar": ["bihar", "बिहार"],
-        "rajasthan": ["rajasthan", "राजस्थान"],
-        "haryana": ["haryana", "हरियाणा"],
-        "uttar pradesh": ["uttar pradesh", "उत्तर प्रदेश", "up nmms"],
-        "madhya pradesh": ["madhya pradesh", "मध्य प्रदेश", "mp nmms"],
-        "delhi": ["delhi", "दिल्ली"],
-        "jharkhand": ["jharkhand", "झारखंड", "झारखण्ड"],
-        "chhattisgarh": ["chhattisgarh", "छत्तीसगढ़", "छत्तीसगढ"],
-        "himachal pradesh": ["himachal pradesh", "himachal", "हिमाचल प्रदेश", "हिमाचल"],
-        "uttarakhand": ["uttarakhand", "उत्तराखंड", "उत्तराखण्ड"],
-        "punjab": ["punjab", "पंजाब"],
-        "maharashtra": ["maharashtra", "महाराष्ट्र"],
-        "gujarat": ["gujarat", "गुजरात"],
-        "odisha": ["odisha", "orissa", "ओडिशा"],
-        "west bengal": ["west bengal", "पश्चिम बंगाल"],
-        "assam": ["assam", "असम"],
+        "bihar": ["bihar", "बिहार", "patna", "पटना", "gaya", "गया", "muzaffarpur", "मुजफ्फरपुर", "bhagalpur", "भागलपुर"],
+        "rajasthan": ["rajasthan", "राजस्थान", "jaipur", "जयपुर", "jodhpur", "जोधपुर", "kota", "कोटा", "udaipur", "उदयपुर", "bikaner", "बीकानेर"],
+        "haryana": ["haryana", "हरियाणा", "nuh", "नूंह", "mewat", "मेवात", "gurugram", "गुरुग्राम", "faridabad", "फरीदाबाद", "rohtak", "रोहतक", "hisar", "हिसार", "bseh"],
+        "uttar pradesh": ["uttar pradesh", "उत्तर प्रदेश", "up nmms", "lucknow", "लखनऊ", "kanpur", "कानपुर", "varanasi", "वाराणसी", "prayagraj", "प्रयागराज", "entdata"],
+        "madhya pradesh": ["madhya pradesh", "मध्य प्रदेश", "mp nmms", "bhopal", "भोपाल", "indore", "इंदौर", "gwalior", "ग्वालियर", "jabalpur", "जबलपुर", "rskmp"],
+        "delhi": ["delhi", "दिल्ली", "new delhi", "नई दिल्ली", "edudel"],
+        "jharkhand": ["jharkhand", "झारखंड", "झारखण्ड", "ranchi", "रांची", "jamshedpur", "जमशेदपुर", "dhanbad", "धनबाद"],
+        "chhattisgarh": ["chhattisgarh", "छत्तीसगढ़", "छत्तीसगढ", "raipur", "रायपुर", "bilaspur", "बिलासपुर", "durg", "दुर्ग"],
+        "himachal pradesh": ["himachal pradesh", "himachal", "हिमाचल प्रदेश", "हिमाचल", "shimla", "शिमला", "dharamshala", "धर्मशाला", "mandi", "मंडी"],
+        "uttarakhand": ["uttarakhand", "उत्तराखंड", "उत्तराखण्ड", "dehradun", "देहरादून", "haridwar", "हरिद्वार", "nainital", "नैनीताल"],
+        "punjab": ["punjab", "पंजाब", "ludhiana", "लुधियाना", "amritsar", "अमृतसर"],
+        "maharashtra": ["maharashtra", "महाराष्ट्र", "mumbai", "मुंबई", "pune", "पुणे"],
+        "gujarat": ["gujarat", "गुजरात", "ahmedabad", "अहमदाबाद"],
+        "odisha": ["odisha", "orissa", "ओडिशा", "bhubaneswar", "भुवनेश्वर"],
+        "west bengal": ["west bengal", "पश्चिम बंगाल", "kolkata", "कोलकाता"],
+        "assam": ["assam", "असम", "guwahati", "गुवाहाटी"],
         "kerala": ["kerala", "केरल"],
-        "karnataka": ["karnataka", "कर्नाटक"],
-        "tamil nadu": ["tamil nadu", "तमिलनाडु"],
+        "karnataka": ["karnataka", "कर्नाटक", "bengaluru", "बेंगलुरु"],
+        "tamil nadu": ["tamil nadu", "तमिलनाडु", "chennai", "चेन्नई"],
         "andhra pradesh": ["andhra pradesh", "andhra", "आंध्र प्रदेश"],
-        "telangana": ["telangana", "तेलंगाना"]
+        "telangana": ["telangana", "तेलंगाना", "hyderabad", "हैदराबाद"]
     }
 
     # LOCK 1: TITLE-DOMINANT CHECK
