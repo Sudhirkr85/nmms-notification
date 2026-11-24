@@ -254,7 +254,7 @@ from data.storage import _memory_store, get_ist_today
 from datetime import timedelta
 _memory_store.clear()
 today = get_ist_today()
-fresh_pub_date = today - timedelta(days=2)
+fresh_pub_date = today  # Published TODAY
 
 mock_ai_ext = {
     "is_error": False,

@@ -233,8 +233,8 @@ def scrape_state_news_rss(state: str, config: dict) -> List[Dict]:
         state_query = f'({state_query} OR "{hindi_name}")'
 
     queries = [
-        f"https://news.google.com/rss/search?q=(%22NMMS%22+OR+%22NMMSS%22)+AND+{state_query}+when:7d&hl=en-IN&gl=IN&ceid=IN:en",
-        f"https://news.google.com/rss/search?q=(%22NMMS%22+OR+%22मेधा+छात्रवृत्ति%22)+AND+{state_query}+when:7d&hl=hi&gl=IN&ceid=IN:hi"
+        f"https://news.google.com/rss/search?q=(%22NMMS%22+OR+%22NMMSS%22)+AND+{state_query}+when:24h&hl=en-IN&gl=IN&ceid=IN:en",
+        f"https://news.google.com/rss/search?q=(%22NMMS%22+OR+%22मेधा+छात्रवृत्ति%22)+AND+{state_query}+when:24h&hl=hi&gl=IN&ceid=IN:hi"
     ]
 
     for rss_url in queries:
@@ -303,15 +303,15 @@ def scrape_state_news_rss(state: str, config: dict) -> List[Dict]:
                 if not pub_date_obj and meta_pubdate_str:
                     pub_date_obj = parse_date_to_ist(meta_pubdate_str)
 
-                # STALE DATE RULE: News items require verifiable publish date within last 7 days
+                # TODAY-ONLY RULE: News items require verifiable publish date from TODAY (or yesterday max within 24-36 hrs)
                 today = get_ist_today()
                 if not pub_date_obj:
                     logger.info(f"Skipping news item '{clean_title[:45]}': missing verifiable publish date")
                     continue
 
                 days_diff = (today - pub_date_obj).days
-                if days_diff < 0 or days_diff > 7:
-                    logger.info(f"Skipping stale news item '{clean_title[:45]}': published on {pub_date_obj} ({days_diff} days old > 7 days)")
+                if days_diff < 0 or days_diff > 1:
+                    logger.info(f"Skipping stale news item '{clean_title[:45]}': published on {pub_date_obj} ({days_diff} days old > 1 day - TODAY only allowed)")
                     continue
 
                 # News items NEVER carry official apply_link or pdf_link from news body

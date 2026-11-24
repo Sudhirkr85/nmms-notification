@@ -379,7 +379,7 @@ def verify_notice_freshness(
     combined_text = f"{title} {url} {notice.get('content_context', '')}".lower()
     is_news = bool(notice.get("is_fallback") or notice.get("origin") == "news")
 
-    # 1. News items require a verifiable publish date within the last 7 days
+    # 1. News items require a verifiable publish date of TODAY (or max yesterday within 1 day)
     if is_news:
         pub_dt = notice.get("pub_date_obj")
         if not pub_dt and notice.get("pub_date"):
@@ -387,8 +387,8 @@ def verify_notice_freshness(
         if not pub_dt:
             return False, "News publish date is missing (cannot verify freshness)"
         days_diff = (today - pub_dt).days
-        if days_diff < 0 or days_diff > 7:
-            return False, f"News publish date ({pub_dt}) is older than 7 days ({days_diff} days old)"
+        if days_diff < 0 or days_diff > 1:
+            return False, f"News publish date ({pub_dt}) is older than 1 day ({days_diff} days old - ONLY TODAY's news allowed)"
 
     # 2. Reject if any extracted deadline/event date is before today (IST)
     for dt in parsed_dates_list:
